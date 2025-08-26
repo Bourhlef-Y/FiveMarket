@@ -439,6 +439,7 @@ sequenceDiagram
 
 ## Roadmap MVP (4 Semaines)
 
+
 ### Semaine 1 : Base & Authentification
 - [ ] Configuration des services (Supabase, Stripe)
 - [ ] Système d'authentification
