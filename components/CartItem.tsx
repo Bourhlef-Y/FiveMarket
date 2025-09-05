@@ -14,7 +14,7 @@ interface CartItemProps {
 }
 
 export default function CartItem({ item }: CartItemProps) {
-  const { updateQuantity, removeFromCart, state } = useCart();
+  const { updateQuantity, removeFromCart, loading } = useCart();
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleQuantityChange = async (newQuantity: number) => {
@@ -74,7 +74,7 @@ export default function CartItem({ item }: CartItemProps) {
                 variant="ghost"
                 size="sm"
                 onClick={handleRemove}
-                disabled={isUpdating || state.isLoading}
+                disabled={isUpdating || loading}
                 className="text-zinc-400 hover:text-red-400 p-1"
               >
                 <Trash2 className="h-4 w-4" />

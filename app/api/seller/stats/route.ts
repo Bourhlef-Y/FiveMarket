@@ -1,111 +1,122 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
+  console.log('API /api/seller/stats GET appelée');
   try {
+    // Créer le client Supabase
     const cookieStore = await cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const period = searchParams.get('period') || '30d';
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: any) {
+            try {
+              cookieStore.set({ name, value, ...options });
+            } catch (error) {
+              console.error('Erreur lors de la définition du cookie:', error);
+            }
+          },
+          remove(name: string, options: any) {
+            try {
+              cookieStore.set({ name, value: '', ...options });
+            } catch (error) {
+              console.error('Erreur lors de la suppression du cookie:', error);
+            }
+          },
+        },
+      }
+    );
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId requis' }, { status: 400 });
+    // Vérifier l'authentification
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
 
-    // Calculer les dates selon la période
-    const now = new Date();
-    let startDate = new Date();
-    let previousStartDate = new Date();
-    
-    switch (period) {
-      case '7d':
-        startDate.setDate(now.getDate() - 7);
-        previousStartDate.setDate(now.getDate() - 14);
-        break;
-      case '30d':
-        startDate.setDate(now.getDate() - 30);
-        previousStartDate.setDate(now.getDate() - 60);
-        break;
-      case '90d':
-        startDate.setDate(now.getDate() - 90);
-        previousStartDate.setDate(now.getDate() - 180);
-        break;
-      case '1y':
-        startDate.setFullYear(now.getFullYear() - 1);
-        previousStartDate.setFullYear(now.getFullYear() - 2);
-        break;
+    // Vérifier le rôle
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || profile?.role !== 'seller') {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    // Récupérer les commandes de la période actuelle
-    const { data: currentOrders } = await supabase
-      .from('orders')
-      .select('amount, created_at, resource_id, resources!inner(author_id)')
-      .eq('resources.author_id', userId)
-      .eq('status', 'completed')
-      .gte('created_at', startDate.toISOString());
-
-    // Récupérer les commandes de la période précédente
-    const { data: previousOrders } = await supabase
-      .from('orders')
-      .select('amount, created_at')
-      .eq('resources.author_id', userId)
-      .eq('status', 'completed')
-      .gte('created_at', previousStartDate.toISOString())
-      .lt('created_at', startDate.toISOString());
-
-    // Récupérer les produits
-    const { data: products } = await supabase
+    // Récupérer les statistiques des produits
+    const { data: products, error: productsError } = await supabase
       .from('resources')
-      .select('id, status, download_count')
-      .eq('author_id', userId);
+      .select('status, price, download_count')
+      .eq('author_id', user.id);
 
-    // Calculer les statistiques actuelles
-    const totalRevenue = currentOrders?.reduce((sum, order) => sum + order.amount, 0) || 0;
-    const totalSales = currentOrders?.length || 0;
+    if (productsError) {
+      console.error('Erreur récupération produits:', productsError);
+      throw productsError;
+    }
+
+    // Récupérer les commandes
+    const { data: orders, error: ordersError } = await supabase
+      .from('orders')
+      .select('total_price, created_at')
+      .eq('resource_id', supabase.from('resources').select('id').eq('author_id', user.id));
+
+    // Calculer les statistiques
     const totalProducts = products?.length || 0;
-    const activeProducts = products?.filter(p => p.status === 'approved').length || 0;
-    const totalViews = Math.floor(Math.random() * 10000) + 1000; // Placeholder
-    const totalDownloads = products?.reduce((sum, p) => sum + (p.download_count || 0), 0) || 0;
+    const approvedProducts = products?.filter(p => p.status === 'approved').length || 0;
+    const pendingProducts = products?.filter(p => p.status === 'pending').length || 0;
+    const rejectedProducts = products?.filter(p => p.status === 'rejected').length || 0;
+    
+    const totalSales = products?.reduce((sum, p) => sum + (p.download_count || 0), 0) || 0;
+    const totalRevenue = products?.reduce((sum, p) => sum + (p.price * (p.download_count || 0)), 0) || 0;
 
-    // Calculer les statistiques précédentes
-    const previousRevenue = previousOrders?.reduce((sum, order) => sum + order.amount, 0) || 0;
-    const previousSales = previousOrders?.length || 0;
-    const previousViews = Math.floor(Math.random() * 8000) + 800; // Placeholder
-    const previousDownloads = totalDownloads * 0.8; // Placeholder
+    // Calculer les revenus du mois en cours
+    const currentMonth = new Date();
+    currentMonth.setDate(1);
+    currentMonth.setHours(0, 0, 0, 0);
+    
+    const monthlyRevenue = products?.reduce((sum, p) => {
+      // Simulation des ventes du mois (en réalité, il faudrait une table des ventes)
+      const monthlyDownloads = Math.floor((p.download_count || 0) * 0.1); // 10% des téléchargements ce mois
+      return sum + (p.price * monthlyDownloads);
+    }, 0) || 0;
 
-    // Calculer les changements en pourcentage
-    const revenueChange = previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
-    const salesChange = previousSales > 0 ? ((totalSales - previousSales) / previousSales) * 100 : 0;
-    const viewsChange = previousViews > 0 ? ((totalViews - previousViews) / previousViews) * 100 : 0;
-    const downloadsChange = previousDownloads > 0 ? ((totalDownloads - previousDownloads) / previousDownloads) * 100 : 0;
+    const monthlySales = Math.floor(totalSales * 0.1); // 10% des ventes ce mois
 
-    // Calculer le taux de conversion
-    const conversionRate = totalViews > 0 ? (totalSales / totalViews) * 100 : 0;
-    const previousConversionRate = previousViews > 0 ? (previousSales / previousViews) * 100 : 0;
-    const conversionChange = previousConversionRate > 0 ? ((conversionRate - previousConversionRate) / previousConversionRate) * 100 : 0;
+    // Récupérer les commandes en attente (simulation)
+    const pendingOrders = 0; // À implémenter avec une vraie table des commandes
 
     const stats = {
-      totalRevenue,
-      revenueChange,
-      totalSales,
-      salesChange,
       totalProducts,
-      activeProducts,
-      totalViews,
-      viewsChange,
-      totalDownloads,
-      downloadsChange,
-      conversionRate,
-      conversionChange
+      totalSales,
+      totalRevenue,
+      pendingOrders,
+      approvedProducts,
+      pendingProducts,
+      rejectedProducts,
+      monthlyRevenue,
+      monthlySales,
+      platformRevenue: {
+        total: totalRevenue * 0.2, // 20% pour la plateforme
+        monthly: monthlyRevenue * 0.2
+      }
     };
+
+    console.log('Statistiques vendeur calculées:', stats);
 
     return NextResponse.json(stats);
 
-  } catch (error) {
-    console.error('Erreur lors du chargement des stats:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Erreur API statistiques vendeur:', error instanceof Error ? error.message : String(error));
+    return NextResponse.json(
+      { error: 'Erreur serveur' },
+      { status: 500 }
+    );
   }
 }

@@ -9,15 +9,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from '@/lib/supabaseClient'; // Utilisation de notre helper
 
 interface User {
   id: string;
   username: string | null;
-  avatar_url: string | null;
+  avatar: string | null;
   role: 'buyer' | 'seller' | 'admin';
   created_at: string;
-  auth_email: string | null;
+  auth_email: string | null; 
   discord_username: string | null;
   country: string | null;
   description: string | null;
@@ -52,10 +52,15 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
   const [selectedRole, setSelectedRole] = useState<string>('');
 
   useEffect(() => {
-    fetchUserData();
-  }, [params.id]);
 
-  const fetchUserData = async () => {
+    async function init() {
+      const { id } = await Promise.resolve(params);
+      fetchUserData(id, supabase);
+    }
+    init();
+  }, [params]);
+
+  const fetchUserData = async (userId: string, supabase: any) => {
     try {
       setLoading(true);
 
@@ -63,7 +68,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
       const { data: userData, error: userError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', params.id)
+        .eq('id', userId)
         .single();
 
       if (userError) throw userError;
@@ -74,7 +79,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
         const { data: resourcesData, error: resourcesError } = await supabase
           .from('resources')
           .select('id, title, price, status, created_at')
-          .eq('author_id', params.id)
+          .eq('author_id', userId)
           .order('created_at', { ascending: false });
 
         if (resourcesError) throw resourcesError;
@@ -93,7 +98,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
             price
           )
         `)
-        .eq('buyer_id', params.id)
+        .eq('buyer_id', userId)
         .order('created_at', { ascending: false });
 
       if (ordersError) throw ordersError;
@@ -109,29 +114,38 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
 
   const handleRoleChange = async () => {
     try {
+      console.log('Tentative de mise à jour du rôle pour l\'utilisateur:', user?.id, 'vers le rôle:', selectedRole);
+      
+
+      
       const { error } = await supabase
         .from('profiles')
         .update({ role: selectedRole })
-        .eq('id', params.id);
+        .eq('id', user?.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erreur Supabase lors de la mise à jour du rôle (dans handleRoleChange):', error);
+        throw error;
+      }
+      console.log('Mise à jour du rôle réussie pour l\'utilisateur:', user?.id);
 
       setUser(prev => prev ? { ...prev, role: selectedRole as User['role'] } : null);
       toast.success('Rôle mis à jour avec succès');
       setShowRoleDialog(false);
     } catch (error: any) {
-      console.error('Erreur lors de la mise à jour du rôle:', error);
-      toast.error('Erreur lors de la mise à jour du rôle');
+      console.error('Erreur lors de la mise à jour du rôle (client, catch):', error);
+      toast.error(error.message || 'Erreur lors de la mise à jour du rôle');
     }
   };
 
   const handleDeleteUser = async () => {
     try {
       // Supprimer le profil
+
       const { error: profileError } = await supabase
         .from('profiles')
         .delete()
-        .eq('id', params.id);
+        .eq('id', user?.id);
 
       if (profileError) throw profileError;
 
@@ -207,7 +221,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
           <CardHeader>
             <div className="flex items-center gap-4">
               <Avatar className="h-20 w-20">
-                <AvatarImage src={user.avatar_url || undefined} />
+                <AvatarImage src={user.avatar || undefined} />
                 <AvatarFallback className="text-2xl">
                   {user.username?.[0]?.toUpperCase() || '?'}
                 </AvatarFallback>
@@ -216,10 +230,12 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
                 <CardTitle className="text-2xl text-white">
                   {user.username || 'Sans nom'}
                 </CardTitle>
-                <CardDescription className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-zinc-400"> {/* Remplacez CardDescription par div */}
                   {user.auth_email}
-                  {getRoleBadge(user.role)}
-                </CardDescription>
+                  <span className="ml-2">
+                    {getRoleBadge(user.role)}
+                  </span>
+                </div>
               </div>
             </div>
           </CardHeader>

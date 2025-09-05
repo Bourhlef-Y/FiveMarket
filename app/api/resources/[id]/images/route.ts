@@ -1,101 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { v4 as uuidv4 } from 'uuid';
-
-// POST - Ajouter des images à une ressource
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id: resourceId } = await context.params;
-    
-    // Vérifier l'authentification
-    const supabase = createRouteHandlerClient({ cookies });
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Non authentifié' },
-        { status: 401 }
-      );
-    }
-    
-    // Vérifier que l'utilisateur est le propriétaire de la ressource
-    const { data: resource, error: resourceError } = await supabase
-      .from('resources')
-      .select('author_id, images')
-      .eq('id', resourceId)
-      .single();
-    
-    if (resourceError) {
-      return NextResponse.json(
-        { error: 'Ressource non trouvée' },
-        { status: 404 }
-      );
-    }
-    
-    if (resource.author_id !== user.id) {
-      return NextResponse.json(
-        { error: 'Non autorisé à modifier cette ressource' },
-        { status: 403 }
-      );
-    }
-    
-    const body = await request.json();
-    const { images: newImages } = body;
-    
-    if (!newImages || !Array.isArray(newImages)) {
-      return NextResponse.json(
-        { error: 'Données d\'images invalides' },
-        { status: 400 }
-      );
-    }
-    
-    // Convertir les nouvelles images au format JSONB
-    const currentImages = resource.images || [];
-    const imagesToAdd = newImages.map((img, index) => ({
-      id: uuidv4(),
-      image: img.image_url,
-      is_thumbnail: img.is_thumbnail || false,
-      upload_order: currentImages.length + index + 1,
-      created_at: new Date().toISOString()
-    }));
-    
-    // Mettre à jour la ressource avec les nouvelles images
-    const { data: updatedResource, error: updateError } = await supabase
-      .from('resources')
-      .update({
-        images: [...currentImages, ...imagesToAdd]
-      })
-      .eq('id', resourceId)
-      .select('images')
-      .single();
-    
-    if (updateError) {
-      console.error('Erreur mise à jour images:', updateError);
-      return NextResponse.json(
-        { error: 'Erreur lors de l\'ajout des images' },
-        { status: 500 }
-      );
-    }
-    
-    return NextResponse.json({
-      success: true,
-      images: updatedResource.images,
-      message: 'Images ajoutées avec succès'
-    });
-    
-  } catch (error) {
-    console.error('Erreur API ajout images:', error);
-    return NextResponse.json(
-      { error: 'Erreur serveur interne' },
-      { status: 500 }
-    );
-  }
-}
 
 // GET - Récupérer les images d'une ressource
 export async function GET(
@@ -105,28 +10,57 @@ export async function GET(
   try {
     const { id: resourceId } = await context.params;
     
-    const supabase = createRouteHandlerClient({ cookies });
-    
-    const { data: resource, error } = await supabase
-      .from('resources')
-      .select('images')
-      .eq('id', resourceId)
-      .single();
-    
-    if (error) {
-      console.error('Erreur récupération images:', error);
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    // Vérifier l'authentification
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
-        { error: 'Erreur lors de la récupération des images' },
-        { status: 500 }
+        { error: 'Non authentifié' },
+        { status: 401 }
       );
     }
-    
-    return NextResponse.json({ 
+
+    // Récupérer la ressource
+    const { data: resource, error: resourceError } = await supabase
+      .from('resources')
+      .select('*')
+      .eq('id', resourceId)
+      .single();
+
+    if (resourceError || !resource) {
+      return NextResponse.json(
+        { error: 'Ressource non trouvée' },
+        { status: 404 }
+      );
+    }
+
+    // Vérifier que l'utilisateur est le propriétaire
+    if (resource.author_id !== user.id) {
+      return NextResponse.json(
+        { error: 'Accès non autorisé' },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
       images: resource.images || []
     });
-    
+
   } catch (error) {
-    console.error('Erreur API images:', error);
+    console.error('Erreur API récupération images:', error);
     return NextResponse.json(
       { error: 'Erreur serveur interne' },
       { status: 500 }
@@ -134,83 +68,230 @@ export async function GET(
   }
 }
 
-// DELETE - Supprimer une image spécifique
-export async function DELETE(
+// POST - Ajouter des images à une ressource
+export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: resourceId } = await context.params;
-    const { searchParams } = new URL(request.url);
-    const imageId = searchParams.get('imageId');
+    
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
 
-    if (!imageId) {
-      return NextResponse.json(
-        { error: 'ID d\'image requis' },
-        { status: 400 }
-      );
-    }
-    
-    const supabase = createRouteHandlerClient({ cookies });
+    // Vérifier l'authentification
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Non authentifié' },
         { status: 401 }
       );
     }
-    
-    // Récupérer la ressource et vérifier les droits
+
+    // Récupérer la ressource
     const { data: resource, error: resourceError } = await supabase
       .from('resources')
-      .select('author_id, images')
+      .select('*')
       .eq('id', resourceId)
       .single();
-    
+
     if (resourceError || !resource) {
       return NextResponse.json(
         { error: 'Ressource non trouvée' },
         { status: 404 }
       );
     }
-    
+
+    // Vérifier que l'utilisateur est le propriétaire
     if (resource.author_id !== user.id) {
       return NextResponse.json(
-        { error: 'Non autorisé' },
+        { error: 'Accès non autorisé' },
         { status: 403 }
       );
     }
+
+    // Récupérer les données JSON avec URLs d'images déjà uploadées
+    const body = await request.json();
+    const imagesToSave = body.images || [];
     
-    // Filtrer l'image à supprimer
-    const updatedImages = (resource.images || []).filter(
-      (img: any) => img.id !== imageId
-    );
+    if (!imagesToSave || imagesToSave.length === 0) {
+      return NextResponse.json(
+        { error: 'Aucune image fournie' },
+        { status: 400 }
+      );
+    }
+
+    const currentImages = resource.images || [];
     
-    // Mettre à jour l'ordre des images restantes
-    const reorderedImages = updatedImages.map((img: any, index: number) => ({
-      ...img,
-      upload_order: index + 1
-    }));
-    
-    // Mettre à jour la ressource
-    const { error: updateError } = await supabase
+    if (imagesToSave.length === 0) {
+      return NextResponse.json(
+        { error: 'Aucune image n\'a pu être uploadée' },
+        { status: 500 }
+      );
+    }
+
+    // Mettre à jour la ressource avec les nouvelles images
+    const { data: updatedResource, error: updateError } = await supabase
       .from('resources')
-      .update({ images: reorderedImages })
-      .eq('id', resourceId);
-    
+      .update({
+        images: [...currentImages, ...imagesToSave]
+      })
+      .eq('id', resourceId)
+      .select('images')
+      .single();
+
     if (updateError) {
+      console.error('Erreur mise à jour images:', updateError);
+      return NextResponse.json(
+        { error: 'Erreur lors de l\'ajout des images' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      images: updatedResource.images,
+      message: `${imagesToSave.length} image(s) ajoutée(s) avec succès`
+    });
+
+  } catch (error) {
+    console.error('Erreur API ajout images:', error);
+    return NextResponse.json(
+      { error: 'Erreur serveur interne' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Supprimer une image d'une ressource
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: resourceId } = await context.params;
+    
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    // Vérifier l'authentification
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Non authentifié' },
+        { status: 401 }
+      );
+    }
+
+    // Récupérer la ressource
+    const { data: resource, error: resourceError } = await supabase
+      .from('resources')
+      .select('*')
+      .eq('id', resourceId)
+      .single();
+
+    if (resourceError || !resource) {
+      return NextResponse.json(
+        { error: 'Ressource non trouvée' },
+        { status: 404 }
+      );
+    }
+
+    // Vérifier que l'utilisateur est le propriétaire
+    if (resource.author_id !== user.id) {
+      return NextResponse.json(
+        { error: 'Accès non autorisé' },
+        { status: 403 }
+      );
+    }
+
+    // Récupérer l'URL de l'image à supprimer
+    const { searchParams } = new URL(request.url);
+    const imageUrl = searchParams.get('imageUrl');
+    
+    if (!imageUrl) {
+      return NextResponse.json(
+        { error: 'URL de l\'image manquante' },
+        { status: 400 }
+      );
+    }
+
+    const currentImages = resource.images || [];
+    
+    // Supprimer l'image de la liste
+    const updatedImages = currentImages.filter((img: any) => {
+      if (typeof img === 'string') {
+        // Si c'est une chaîne JSON, parser et comparer
+        try {
+          const parsed = JSON.parse(img);
+          return parsed.image_url !== imageUrl;
+        } catch {
+          return img !== imageUrl;
+        }
+      }
+      // Si c'est un objet, comparer directement
+      return img.image_url !== imageUrl;
+    });
+
+    // Mettre à jour la ressource
+    const { data: updatedResource, error: updateError } = await supabase
+      .from('resources')
+      .update({
+        images: updatedImages
+      })
+      .eq('id', resourceId)
+      .select('images')
+      .single();
+
+    if (updateError) {
+      console.error('Erreur mise à jour images:', updateError);
       return NextResponse.json(
         { error: 'Erreur lors de la suppression de l\'image' },
         { status: 500 }
       );
     }
-    
+
+    // Optionnel: Supprimer le fichier du storage Supabase
+    try {
+      // Extraire le chemin du fichier depuis l'URL
+      const urlParts = imageUrl.split('/storage/v1/object/public/images/');
+      if (urlParts.length > 1) {
+        const filePath = urlParts[1];
+        await supabase.storage
+          .from('images')
+          .remove([filePath]);
+      }
+    } catch (storageError) {
+      console.error('Erreur suppression fichier storage:', storageError);
+      // Ne pas faire échouer la requête si la suppression du fichier échoue
+    }
+
     return NextResponse.json({
       success: true,
+      images: updatedResource.images,
       message: 'Image supprimée avec succès'
     });
-    
+
   } catch (error) {
     console.error('Erreur API suppression image:', error);
     return NextResponse.json(

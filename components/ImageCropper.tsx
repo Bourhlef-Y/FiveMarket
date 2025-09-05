@@ -1,71 +1,64 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import Cropper from "react-easy-crop";
+import { useCallback, useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import Cropper from 'react-easy-crop';
+import { Point, Area } from 'react-easy-crop/types';
 
 interface ImageCropperProps {
-  imageSrc: string;
-  onCropComplete: (croppedBlob: Blob) => void;
+  onComplete: (croppedBlob: Blob) => void;
   onCancel: () => void;
-  aspectRatio?: number;
-  circularCrop?: boolean;
+  loading?: boolean;
 }
 
-export default function ImageCropper({
-  imageSrc,
-  onCropComplete,
-  onCancel,
-  aspectRatio = 1,
-  circularCrop = false,
-}: ImageCropperProps) {
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
+export default function ImageCropper({ onComplete, onCancel, loading = false }: ImageCropperProps) {
+  const [image, setImage] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
 
-  const onCropChange = useCallback((crop: { x: number; y: number }) => {
-    setCrop(crop);
+  const onCropComplete = useCallback((croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
   }, []);
 
-  const onZoomChange = useCallback((zoom: number[]) => {
-    setZoom(zoom[0]);
-  }, []);
-
-  const onCropCompleteHandler = useCallback(
-    (_croppedArea: any, croppedAreaPixels: any) => {
-      setCroppedAreaPixels(croppedAreaPixels);
-    },
-    []
-  );
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const reader = new FileReader();
+      reader.addEventListener('load', () => {
+        if (typeof reader.result === 'string') {
+          setImage(reader.result);
+        }
+      });
+      reader.readAsDataURL(e.target.files[0]);
+    }
+  };
 
   const createImage = (url: string): Promise<HTMLImageElement> =>
     new Promise((resolve, reject) => {
       const image = new Image();
-      image.addEventListener("load", () => resolve(image));
-      image.addEventListener("error", (error) => reject(error));
+      image.addEventListener('load', () => resolve(image));
+      image.addEventListener('error', error => reject(error));
       image.src = url;
     });
 
   const getCroppedImg = async (
     imageSrc: string,
-    pixelCrop: any
+    pixelCrop: Area,
   ): Promise<Blob> => {
     const image = await createImage(imageSrc);
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
 
     if (!ctx) {
-      throw new Error("No 2d context");
+      throw new Error('No 2d context');
     }
 
-    // Définir les dimensions du canvas
-    canvas.width = pixelCrop.width;
-    canvas.height = pixelCrop.height;
+    // Set canvas size to desired output size
+    canvas.width = 400;
+    canvas.height = 400;
 
-    // Dessiner l'image recadrée
+    // Draw the cropped image scaled to 400x400
     ctx.drawImage(
       image,
       pixelCrop.x,
@@ -74,88 +67,109 @@ export default function ImageCropper({
       pixelCrop.height,
       0,
       0,
-      pixelCrop.width,
-      pixelCrop.height
+      400,
+      400
     );
 
-    // Si crop circulaire, appliquer un masque rond
-    if (circularCrop) {
-      ctx.globalCompositeOperation = "destination-in";
-      ctx.beginPath();
-      ctx.arc(
-        canvas.width / 2,
-        canvas.height / 2,
-        canvas.width / 2,
-        0,
-        2 * Math.PI,
-        true
+    // Convert canvas to blob
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        blob => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Canvas is empty'));
+          }
+        },
+        'image/jpeg',
+        0.95
       );
-      ctx.fill();
-    }
-
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        if (!blob) throw new Error("Canvas is empty");
-        resolve(blob);
-      }, "image/png");
     });
   };
 
-  const handleComplete = async () => {
+  const handleCropComplete = async () => {
+    if (!image || !croppedAreaPixels) return;
+
     try {
-      if (!croppedAreaPixels) return;
-      const croppedImage = await getCroppedImg(imageSrc, croppedAreaPixels);
-      onCropComplete(croppedImage);
+      const croppedImage = await getCroppedImg(image, croppedAreaPixels);
+      onComplete(croppedImage);
     } catch (e) {
       console.error(e);
     }
   };
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Recadrer l'image</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="relative w-full h-[300px]">
-          <Cropper
-            image={imageSrc}
-            crop={crop}
-            zoom={zoom}
-            aspect={aspectRatio}
-            onCropChange={onCropChange}
-            onCropComplete={onCropCompleteHandler}
-            onZoomChange={(z) => setZoom(z)}
-            cropShape={circularCrop ? "round" : "rect"}
-            showGrid={false}
-            objectFit="contain"
-          />
+    <Dialog open={true} onOpenChange={() => !loading && onCancel()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Modifier l'avatar</DialogTitle>
+          <DialogDescription>
+            Choisissez une image et ajustez-la pour votre avatar.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {!image ? (
+            <div className="flex items-center justify-center w-full">
+              <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-zinc-700 border-dashed rounded-lg cursor-pointer bg-zinc-800 hover:bg-zinc-700">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <svg className="w-8 h-8 mb-4 text-zinc-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
+                  </svg>
+                  <p className="mb-2 text-sm text-zinc-400"><span className="font-semibold">Cliquez pour uploader</span> ou glissez-déposez</p>
+                  <p className="text-xs text-zinc-400">PNG, JPG (MAX. 800x400px)</p>
+                </div>
+                <input 
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  disabled={loading}
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="relative w-full h-64">
+              <Cropper
+                image={image}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                onCropChange={setCrop}
+                onCropComplete={onCropComplete}
+                onZoomChange={setZoom}
+                cropShape="round"
+                showGrid={false}
+                style={{
+                  containerStyle: {
+                    borderRadius: '0.5rem',
+                    backgroundColor: '#27272a',
+                  },
+                }}
+              />
+            </div>
+          )}
         </div>
-        <div className="p-6 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="zoom">Zoom</Label>
-            <Slider
-              id="zoom"
-              value={[zoom]}
-              min={1}
-              max={3}
-              step={0.1}
-              onValueChange={onZoomChange}
-            />
-          </div>
-        </div>
-      </CardContent>
-      <CardFooter className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          onClick={onCancel}
-        >
-          Annuler
-        </Button>
-        <Button onClick={handleComplete} variant="default">
-          Valider
-        </Button>
-      </CardFooter>
-    </Card>
+        <DialogFooter className="flex justify-between sm:justify-between">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Annuler
+          </Button>
+          {image && (
+            <Button
+              type="button"
+              onClick={handleCropComplete}
+              disabled={loading}
+              className="bg-[#FF7101] hover:bg-[#FF7101]/90 text-white"
+            >
+              {loading ? "Chargement..." : "Appliquer"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,30 +1,79 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { validateResourcePayload, sanitizeResourcePayload } from '@/lib/resourceValidationServer';
+import { validateResourcePayload, sanitizeResourcePayload, isResourceComplete } from '@/lib/resourceValidationServer';
 import { CreateResourceFormData, ResourceFormErrors } from '@/lib/types';
 import { createClient } from '@supabase/supabase-js';
+
+// Helper pour créer le client Supabase avec authentification (pour les routes API)
+async function createAuthenticatedSupabaseClient(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const hasBearer = authHeader.toLowerCase().startsWith('bearer ');
+  const cookieStore = await cookies(); // Appeler cookies() une seule fois ici
+
+  if (hasBearer) {
+    const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+    const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, detectSessionInUrl: false },
+    });
+  } else {
+    return createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: any) {
+            try {
+              cookieStore.set({ name, value, ...options });
+            } catch (error) {
+              console.error('Erreur lors de la définition du cookie:', error);
+            }
+          },
+          remove(name: string, options: any) {
+            try {
+              cookieStore.set({ name, value: '', ...options });
+            } catch (error) {
+              console.error('Erreur lors de la suppression du cookie:', error);
+            }
+          },
+        },
+      }
+    );
+  }
+}
 
 // GET - Récupérer les ressources
 export async function GET(request: NextRequest) {
   try {
-    // Pour les requêtes GET publiques, on peut utiliser le client anon directement
-    // Pas besoin d'authentification pour lister les ressources publiques
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
     const { searchParams } = new URL(request.url);
     
-    // Paramètres de filtrage
+    // Pour les requêtes GET publiques, on peut utiliser le client anon directement
+    // Pas besoin d'authentification pour lister les ressources publiques
+    let supabaseClient;
+
     const authorId = searchParams.get('author_id');
+    if (authorId) {
+      supabaseClient = await createAuthenticatedSupabaseClient(request);
+    } else {
+      supabaseClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+    }
+    
+    // Paramètres de filtrage
     const status = searchParams.get('status');
     const category = searchParams.get('category');
     const framework = searchParams.get('framework');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50); // Max 50 par page
     
-    let query = supabase
+    let query = supabaseClient
       .from('resources')
       .select(`
         *,
@@ -95,64 +144,55 @@ export async function GET(request: NextRequest) {
 // POST - Créer une nouvelle ressource
 export async function POST(request: NextRequest) {
   try {
-    // Préférer l'auth via Bearer (envoyé depuis le client), fallback sur cookies
-    const authHeader = request.headers.get('Authorization') || '';
-    const hasBearer = authHeader.toLowerCase().startsWith('bearer ');
+    const supabase = await createAuthenticatedSupabaseClient(request);
+    
+    let finalUser = null;
+    let finalSupabase = supabase;
 
-    let supabase;
-    if (hasBearer) {
-      const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-      const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        global: { headers: { Authorization: authHeader } },
-        auth: { persistSession: false, detectSessionInUrl: false },
-      });
-    } else {
-      supabase = createRouteHandlerClient({ cookies });
-    }
-    
-    // Essayer getUser en premier (plus fiable pour les routes API)
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    console.log('getUser API:', user?.email || 'Aucun utilisateur');
-    
-    // Fallback vers getSession si getUser échoue (cookies)
-    if (!user && !hasBearer) {
-      console.log('Fallback vers getSession...');
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      console.log('getSession API:', session?.user?.email || 'Aucune session');
-      
-      if (!session?.user) {
-        console.error('Erreurs auth:', { userError, sessionError });
-        return NextResponse.json(
-          { error: 'Non authentifié - Veuillez vous reconnecter' },
-          { status: 401 }
-        );
-      }
-      
-      const finalUser = session.user;
-      console.log('Utilisateur final depuis session:', finalUser.email);
-    } else if (user) {
-      const finalUser = user;
+    // Tenter d'abord avec getUser
+    const { data: { user }, error: getUserError } = await supabase.auth.getUser();
+    if (user) {
+      finalUser = user;
       console.log('Utilisateur final depuis getUser:', finalUser.email);
+    } else if (getUserError) {
+      console.error('Erreur getUser:', getUserError);
+    }
+
+    // Si pas d'utilisateur via getUser, essayer getSession (pour les cookies)
+    if (!finalUser) {
+      console.log('Fallback vers getSession...');
+      const { data: { session }, error: getSessionError } = await supabase.auth.getSession();
+      if (session?.user) {
+        finalUser = session.user;
+        console.log('Utilisateur final depuis session:', finalUser.email);
+      } else if (getSessionError) {
+        console.error('Erreur getSession:', getSessionError);
+      }
     }
     
-    // Variable user pour la suite
-    const finalUser = user || (!hasBearer ? (await supabase.auth.getSession()).data.session?.user : null);
     if (!finalUser) {
       return NextResponse.json(
-        { error: 'Impossible de vérifier l\'authentification' },
+        { error: 'Non authentifié - Veuillez vous reconnecter' },
         { status: 401 }
       );
     }
     
     // Vérifier le rôle vendeur
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await finalSupabase
       .from('profiles')
       .select('role')
       .eq('id', finalUser.id)
       .single();
     
-    if (!profile || !['seller', 'admin'].includes(profile.role)) {
+    if (profileError) {
+      console.error('Erreur récupération profil:', profileError);
+      return NextResponse.json(
+        { error: 'Erreur lors de la récupération du profil utilisateur' },
+        { status: 500 }
+      );
+    }
+    
+    if (!profile || profile.role !== 'seller') {
       return NextResponse.json(
         { error: 'Vous devez être vendeur pour créer une ressource' },
         { status: 403 }
@@ -161,6 +201,7 @@ export async function POST(request: NextRequest) {
     
     const body = await request.json();
     const formData = body;
+    const { status: requestedStatus = 'draft' } = body; // Par défaut 'draft', peut être 'pending'
     
     // Validation côté serveur
     const errors = validateResourcePayload(formData);
@@ -174,8 +215,22 @@ export async function POST(request: NextRequest) {
     // Nettoyer les données
     const cleanData = sanitizeResourcePayload(formData);
     
+    // Déterminer le statut final
+    let finalStatus = 'draft';
+    if (requestedStatus === 'pending') {
+      // Vérifier si le produit est complet avant de le mettre en attente
+      if (isResourceComplete(cleanData)) {
+        finalStatus = 'pending';
+      } else {
+        return NextResponse.json(
+          { error: 'Le produit doit être complet pour être soumis en attente de validation' },
+          { status: 400 }
+        );
+      }
+    }
+    
     // Créer la ressource principale
-    const { data: resource, error: resourceError } = await supabase
+    const { data: resource, error: resourceError } = await finalSupabase
       .from('resources')
       .insert({
         author_id: finalUser.id,
@@ -185,7 +240,7 @@ export async function POST(request: NextRequest) {
         resource_type: cleanData.resource_type,
         framework: cleanData.framework,
         category: cleanData.category,
-        status: 'draft'
+        status: finalStatus
       })
       .select()
       .single();
@@ -200,7 +255,7 @@ export async function POST(request: NextRequest) {
     
     // Si c'est une ressource escrow, créer les infos escrow
     if (cleanData.resource_type === 'escrow' && cleanData.escrowInfo) {
-      const { error: escrowError } = await supabase
+      const { error: escrowError } = await finalSupabase
         .from('resource_escrow_info')
         .insert({
           resource_id: resource.id,
@@ -213,7 +268,7 @@ export async function POST(request: NextRequest) {
       if (escrowError) {
         console.error('Erreur création info escrow:', escrowError);
         // Supprimer la ressource créée en cas d'erreur
-        await supabase.from('resources').delete().eq('id', resource.id);
+        await finalSupabase.from('resources').delete().eq('id', resource.id);
         return NextResponse.json(
           { error: 'Erreur lors de la création des informations escrow' },
           { status: 500 }

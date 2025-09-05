@@ -1,4 +1,4 @@
-import { createClient } from './supabase-browser';
+import { supabase } from './supabaseClient';
 
 // Helper pour obtenir l'URL de redirection correcte (selon la doc Supabase)
 const getURL = () => {
@@ -17,7 +17,6 @@ const getURL = () => {
 
 // Fonction pour la connexion Discord OAuth
 export const signInWithDiscord = async () => {
-    const supabase = createClient();
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'discord',
         options: {
@@ -35,7 +34,6 @@ export const signInWithDiscord = async () => {
 
 // Fonction utilitaire pour forcer la synchronisation après OAuth
 export const refreshSession = async () => {
-    const supabase = createClient();
     const { data, error } = await supabase.auth.refreshSession();
     
     if (error) {
@@ -46,7 +44,6 @@ export const refreshSession = async () => {
 };
 
 export const signUp = async (email: string, password: string, username: string) => {
-    const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -69,7 +66,6 @@ export const signUp = async (email: string, password: string, username: string) 
 };
 
 export const signIn = async (email: string, password: string) => {
-    const supabase = createClient();
     const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -88,7 +84,6 @@ export const signIn = async (email: string, password: string) => {
 };
 
 export const signOut = async () => {
-    const supabase = createClient();
     const { error } = await supabase.auth.signOut();
     
     if (error) {

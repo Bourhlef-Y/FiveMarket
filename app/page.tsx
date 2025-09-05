@@ -63,7 +63,7 @@ export default async function Home() {
 
       <main>
         {/* Hero Section */}
-        <section className="relative py-20 md:py-32 overflow-hidden bg-zinc-900">
+        <section className="relative py-10 md:py-5 overflow-hidden bg-zinc-900">
           <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800"></div>
           <div className="absolute inset-0 opacity-20 bg-[url('/sheriff.png?height=1080&width=1920')] bg-cover bg-center"></div>
           <div className="container relative z-10 flex flex-col items-center text-center">

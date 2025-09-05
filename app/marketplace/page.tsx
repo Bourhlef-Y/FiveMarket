@@ -61,12 +61,19 @@ export default function MarketplacePage() {
         *,
         profiles:author_id (
           username,
-          avatar_url
+          avatar
         )
-      `)
-      .eq('status', 'approved'); // Seulement les ressources approuvées
+      `);
+    
+    // Si aucun filtre de statut n'est appliqué, afficher les ressources approuvées, en attente et les brouillons
+    if (appliedCategory === 'all' && appliedFramework === 'all' && appliedResourceType === 'all' && appliedDateFilter === 'all' && appliedPopularityFilter === 'all' && appliedPriceRange[0] === 100 && !appliedFreeOnly) {
+      query = query.in('status', ['approved', 'pending', 'draft']);
+    } else {
+      // Sinon, si des filtres sont appliqués, ne montrer que les approuvées par défaut (peut être ajusté)
+      query = query.eq('status', 'approved');
+    }
 
-    // Appliquer les filtres
+    // Appliquer les filtres existants
     if (appliedFramework !== 'all') {
       query = query.eq('framework', appliedFramework);
     }

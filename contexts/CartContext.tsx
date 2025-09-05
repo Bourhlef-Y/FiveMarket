@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
-import { createClient } from '@/lib/supabase-browser';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from './AuthContext';
 import { useToast } from '@/hooks/useToast';
 
@@ -9,7 +9,7 @@ interface CartItem {
   id: string;
   resource_id: string;
   resource_title: string;
-  resource_thumbnail_url?: string;
+  resource_thumbnail?: string;
   author_username?: string;
   quantity: number;
   price_at_time: number;
@@ -20,6 +20,7 @@ interface CartState {
   items: CartItem[];
   loading: boolean;
   itemCount: number;
+  total: number;
 }
 
 type CartAction =
@@ -30,17 +31,20 @@ type CartAction =
 const initialState: CartState = {
   items: [],
   loading: false,
-  itemCount: 0
+  itemCount: 0,
+  total: 0
 };
 
 function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case 'SET_CART':
+      const newTotal = action.payload.reduce((sum, item) => sum + item.subtotal, 0);
       return {
         ...state,
         items: action.payload,
         loading: false,
-        itemCount: action.payload.reduce((total, item) => total + item.quantity, 0)
+        itemCount: action.payload.reduce((total, item) => total + item.quantity, 0),
+        total: newTotal
       };
     
     case 'SET_LOADING':
@@ -54,7 +58,8 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         ...state,
         items: [],
         loading: false,
-        itemCount: 0
+        itemCount: 0,
+        total: 0
       };
       
     default:
@@ -89,7 +94,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       
-      const supabase = createClient();
+
       const { data: { session } } = await supabase.auth.getSession();
       
       const response = await fetch('/api/cart', {
@@ -236,6 +241,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       items: state.items,
       loading: state.loading,
       itemCount: state.itemCount,
+      total: state.total,
       addToCart,
       removeFromCart,
       clearCart,
@@ -258,6 +264,7 @@ interface CartContextType {
   items: CartItem[];
   loading: boolean;
   itemCount: number;
+  total: number;
   addToCart: (resource_id: string, price: number, quantity?: number) => Promise<boolean>;
   removeFromCart: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;

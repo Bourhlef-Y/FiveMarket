@@ -29,21 +29,52 @@ export async function uploadImage(
     throw new Error(validation.error);
   }
 
-  // Convertir en base64
-  const base64 = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+  if (onProgress) {
+    onProgress(10);
+  }
+
+  // Créer un nom de fichier unique
+  const timestamp = Date.now();
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${timestamp}.${fileExt}`;
+  const filePath = `resources/${resourceId}/${fileName}`;
+
+  if (onProgress) {
+    onProgress(50);
+  }
+
+  // Upload vers Supabase Storage (comme pour les avatars)
+  console.log('Upload vers Supabase Storage:', filePath, file.name, file.type);
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from('images')
+    .upload(filePath, file, {
+      contentType: file.type,
+      upsert: true
+    });
+
+  if (uploadError) {
+    console.error('Erreur upload Supabase:', uploadError);
+    throw new Error(`Erreur lors de l'upload: ${uploadError.message}`);
+  }
+
+  console.log('Upload réussi:', uploadData);
+
+  if (onProgress) {
+    onProgress(80);
+  }
+
+  // Obtenir l'URL publique
+  const { data: { publicUrl } } = supabase.storage
+    .from('images')
+    .getPublicUrl(filePath);
 
   if (onProgress) {
     onProgress(100);
   }
 
   return {
-    url: base64,
-    publicUrl: base64
+    url: publicUrl,
+    publicUrl: publicUrl
   };
 }
 

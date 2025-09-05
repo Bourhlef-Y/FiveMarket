@@ -29,7 +29,7 @@ export default function QuickActions() {
       description: 'Modifier vos ressources',
       icon: Package,
       color: 'bg-blue-600 hover:bg-blue-700',
-      onClick: () => router.push('/account?tab=resources')
+      onClick: () => router.push('/seller/products')
     },
     {
       label: 'Analytics',

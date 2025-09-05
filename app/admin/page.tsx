@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { createClient } from '@/lib/supabase-browser';
+import { supabase } from '@/lib/supabaseClient';
 import { Users, ShoppingBag, UserPlus, TrendingUp } from 'lucide-react';
 
 interface DashboardStats {
@@ -24,7 +24,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const supabase = createClient();
+    
 
         // Compter les utilisateurs par rôle
         const { data: userStats, error: userError } = await supabase

@@ -262,6 +262,8 @@ export function sanitizeFormData(formData: CreateResourceFormData): CreateResour
     title: formData.title.trim(),
     description: formData.description.trim(),
     price: Math.round(formData.price * 100) / 100, // Arrondir à 2 décimales
+    images: formData.images, // Préserver les images
+    resourceFile: formData.resourceFile, // Préserver le fichier de ressource
     escrowInfo: formData.escrowInfo ? {
       ...formData.escrowInfo,
       delivery_instructions: formData.escrowInfo.delivery_instructions?.trim(),

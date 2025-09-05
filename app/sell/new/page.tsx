@@ -16,6 +16,107 @@ export default function NewResourcePage() {
   const { user, profile, loading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
+  const handleSaveDraft = async (formData: CreateResourceFormData) => {
+    if (!user || !profile) {
+      toast({
+        title: 'Session expirée',
+        description: 'Votre session a expiré. Veuillez vous reconnecter.',
+        variant: 'destructive'
+      });
+      router.push('/auth/sign-in');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      console.log('Début sauvegarde brouillon pour:', user.email);
+      
+      // Créer la ressource en brouillon
+      const response = await fetch('/api/resources', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          price: formData.price,
+          resource_type: formData.resource_type,
+          framework: formData.framework,
+          category: formData.category,
+          escrowInfo: formData.escrowInfo,
+          status: 'draft'
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erreur lors de la sauvegarde');
+      }
+
+      const { resource } = await response.json();
+      const resourceId = resource.id;
+
+      // Upload des images si présentes
+      if (formData.images.length > 0) {
+        try {
+          const imageResults = await uploadMultipleImages(
+            formData.images,
+            user.id,
+            resourceId
+          );
+
+          // Préparer les données des images pour la base
+          const imagesToSave = imageResults
+            .filter(result => result.url && !result.error)
+            .map((result, index) => ({
+              image_url: result.url,
+              is_thumbnail: index === 0,
+              upload_order: index + 1
+            }));
+
+          // Sauvegarder les images en base
+          if (imagesToSave.length > 0) {
+            const imageResponse = await fetch(`/api/resources/${resourceId}/images`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ images: imagesToSave }),
+            });
+
+            if (!imageResponse.ok) {
+              const imageError = await imageResponse.json();
+              console.error('Erreur sauvegarde images:', imageError);
+              // Ne pas faire échouer la sauvegarde du brouillon pour les images
+            } else {
+              console.log('Images sauvegardées avec succès');
+            }
+          }
+        } catch (imageError) {
+          console.error('Erreur upload images:', imageError);
+          // Ne pas faire échouer la sauvegarde du brouillon pour les images
+        }
+      }
+      
+      // Rediriger vers la page d'édition pour continuer plus tard
+      router.push(`/sell/edit/${resource.id}`);
+      
+    } catch (error) {
+      console.error('Erreur sauvegarde brouillon:', error);
+      toast({
+        title: 'Erreur',
+        description: error instanceof Error ? error.message : 'Une erreur est survenue',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (formData: CreateResourceFormData) => {
     if (!user || !profile) {
       toast({
@@ -31,8 +132,10 @@ export default function NewResourcePage() {
 
     try {
       console.log('Début création ressource pour:', user.email);
+      console.log('FormData reçu:', formData);
+      console.log('Images dans formData:', formData.images);
       
-      // 1. Créer d'abord la ressource en base
+      // 1. Créer d'abord la ressource en base avec statut "pending"
       const response = await fetch('/api/resources', {
         method: 'POST',
         headers: {
@@ -46,7 +149,8 @@ export default function NewResourcePage() {
           resource_type: formData.resource_type,
           framework: formData.framework,
           category: formData.category,
-          escrowInfo: formData.escrowInfo
+          escrowInfo: formData.escrowInfo,
+          status: 'pending'
         }),
       });
 
@@ -61,13 +165,16 @@ export default function NewResourcePage() {
       const resourceId = resource.id;
 
       // 2. Upload des images
+      console.log('Images à uploader:', formData.images.length, formData.images);
       if (formData.images.length > 0) {
         try {
+          console.log('Début upload des images...');
           const imageResults = await uploadMultipleImages(
             formData.images,
             user.id,
             resourceId
           );
+          console.log('Résultats upload images:', imageResults);
 
           // Préparer les données des images pour la base
           const imagesToSave = imageResults
@@ -155,7 +262,7 @@ export default function NewResourcePage() {
       });
 
       // Rediriger vers la page de gestion des ressources
-      router.push('/account?tab=resources');
+      router.push('/seller/products');
 
     } catch (error) {
       console.error('Erreur création ressource:', error);
@@ -191,8 +298,8 @@ export default function NewResourcePage() {
     return null;
   }
 
-  // Vérifier le rôle
-  if (!['seller', 'admin'].includes(profile.role)) {
+  // Vérifier le rôle (seuls les vendeurs peuvent créer des ressources)
+  if (profile.role !== 'seller') {
     return (
       <div className="min-h-screen bg-zinc-900 p-6">
         <div className="max-w-2xl mx-auto pt-20">
@@ -262,6 +369,7 @@ export default function NewResourcePage() {
       <div className="py-8">
         <ResourceForm
           onSubmit={handleSubmit}
+          onSaveDraft={handleSaveDraft}
           onCancel={handleCancel}
           isLoading={isLoading}
         />

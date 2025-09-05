@@ -39,18 +39,24 @@ import { toast } from '@/hooks/useToast';
 
 interface ResourceFormProps {
   onSubmit?: (data: CreateResourceFormData) => Promise<void>;
+  onSaveDraft?: (data: CreateResourceFormData) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
   initialData?: Partial<CreateResourceFormData>;
   mode?: 'create' | 'edit';
+  existingImages?: Array<{ image_url: string; id?: string; is_thumbnail?: boolean; upload_order?: number }>;
+  onDeleteImage?: (imageUrl: string) => Promise<void>;
 }
 
 export default function ResourceForm({ 
   onSubmit, 
+  onSaveDraft,
   onCancel, 
   isLoading = false,
   initialData,
-  mode = 'create'
+  mode = 'create',
+  existingImages = [],
+  onDeleteImage
 }: ResourceFormProps) {
   // État du formulaire
   const [formData, setFormData] = useState<CreateResourceFormData>({
@@ -73,6 +79,7 @@ export default function ResourceForm({
   const [errors, setErrors] = useState<ResourceFormErrors>({});
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<ImageUploadProgress[]>([]);
+  const [deletedImages, setDeletedImages] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -80,11 +87,15 @@ export default function ResourceForm({
   const handleImageUpload = useCallback(async (files: FileList) => {
     const newFiles = Array.from(files);
     
-    // Validation du nombre total d'images
-    if (formData.images.length + newFiles.length > VALIDATION_RULES.images.maxFiles) {
+    // Calculer le nombre total d'images (existantes - supprimées + nouvelles)
+    const currentExistingImages = existingImages.filter(img => !deletedImages.includes(img.image_url));
+    const totalImages = currentExistingImages.length + formData.images.length + newFiles.length;
+    
+    // Validation du nombre total d'images (limite à 10)
+    if (totalImages > 10) {
       toast({
         title: 'Trop d\'images',
-        description: `Vous ne pouvez uploader que ${VALIDATION_RULES.images.maxFiles} images maximum`,
+        description: `Vous ne pouvez avoir que 10 images maximum (actuellement: ${currentExistingImages.length} existantes + ${formData.images.length} nouvelles + ${newFiles.length} à ajouter = ${totalImages})`,
         variant: 'destructive'
       });
       return;
@@ -102,10 +113,14 @@ export default function ResourceForm({
       }
     }
 
-    setFormData(prev => ({
-      ...prev,
-      images: [...prev.images, ...newFiles]
-    }));
+    setFormData(prev => {
+      const newFormData = {
+        ...prev,
+        images: [...prev.images, ...newFiles]
+      };
+      console.log('Images ajoutées au formData:', newFormData.images);
+      return newFormData;
+    });
     
     setImagePreviews(prev => [...prev, ...newPreviews]);
   }, [formData.images.length]);
@@ -118,6 +133,32 @@ export default function ResourceForm({
     
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
   }, []);
+
+  const removeExistingImage = useCallback(async (imageUrl: string) => {
+    // Ajouter à la liste des images supprimées
+    setDeletedImages(prev => [...prev, imageUrl]);
+    
+    // Appeler la fonction de suppression si fournie
+    if (onDeleteImage) {
+      try {
+        await onDeleteImage(imageUrl);
+        toast({
+          title: 'Image supprimée',
+          description: 'L\'image a été supprimée avec succès',
+          variant: 'success'
+        });
+      } catch (error) {
+        console.error('Erreur suppression image:', error);
+        toast({
+          title: 'Erreur',
+          description: 'Erreur lors de la suppression de l\'image',
+          variant: 'destructive'
+        });
+        // Retirer de la liste des supprimées en cas d'erreur
+        setDeletedImages(prev => prev.filter(url => url !== imageUrl));
+      }
+    }
+  }, [onDeleteImage]);
 
   // Gestion du fichier de ressource
   const handleResourceFileUpload = useCallback((file: File) => {
@@ -175,6 +216,34 @@ export default function ResourceForm({
       toast({
         title: 'Erreur',
         description: 'Une erreur est survenue lors de la création de la ressource',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (isSubmitting || isLoading) return;
+    
+    setIsSubmitting(true);
+    
+    try {
+      const cleanData = sanitizeFormData(formData);
+      
+      if (onSaveDraft) {
+        await onSaveDraft(cleanData);
+        toast({
+          title: 'Brouillon sauvegardé',
+          description: 'Votre produit a été sauvegardé en brouillon',
+          variant: 'success'
+        });
+      }
+    } catch (error) {
+      console.error('Erreur sauvegarde brouillon:', error);
+      toast({
+        title: 'Erreur',
+        description: 'Une erreur est survenue lors de la sauvegarde',
         variant: 'destructive'
       });
     } finally {
@@ -442,34 +511,77 @@ export default function ResourceForm({
                     </Alert>
                   )}
 
-                  {/* Aperçu des images */}
-                  {imagePreviews.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {imagePreviews.map((preview, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={preview}
-                            alt={`Aperçu ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg border border-zinc-700"
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 h-auto"
-                            onClick={() => removeImage(index)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                          {index === 0 && (
-                            <Badge 
-                              className="absolute bottom-2 left-2 bg-[#FF7101] text-white"
+                  {/* Images existantes */}
+                  {existingImages.filter(img => !deletedImages.includes(img.image_url)).length > 0 && (
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium text-zinc-300">
+                        Images existantes ({existingImages.filter(img => !deletedImages.includes(img.image_url)).length})
+                      </Label>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {existingImages
+                          .filter(img => !deletedImages.includes(img.image_url))
+                          .map((image, index) => (
+                          <div key={image.image_url} className="relative group">
+                            <img
+                              src={image.image_url}
+                              alt={`Image existante ${index + 1}`}
+                              className="w-full h-32 object-cover rounded-lg border border-zinc-700"
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 h-auto"
+                              onClick={() => removeExistingImage(image.image_url)}
                             >
-                              Miniature
-                            </Badge>
-                          )}
-                        </div>
-                      ))}
+                              <X className="w-4 h-4" />
+                            </Button>
+                            {image.is_thumbnail && (
+                              <Badge 
+                                className="absolute bottom-2 left-2 bg-[#FF7101] text-white"
+                              >
+                                Miniature
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Aperçu des nouvelles images */}
+                  {imagePreviews.length > 0 && (
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium text-zinc-300">
+                        Nouvelles images ({imagePreviews.length})
+                      </Label>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {imagePreviews.map((preview, index) => (
+                          <div key={index} className="relative group">
+                            <img
+                              src={preview}
+                              alt={`Aperçu ${index + 1}`}
+                              className="w-full h-32 object-cover rounded-lg border border-zinc-700"
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 h-auto"
+                              onClick={() => removeImage(index)}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                            {index === 0 && (
+                              <Badge 
+                                className="absolute bottom-2 left-2 bg-[#FF7101] text-white"
+                              >
+                                Miniature
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -722,6 +834,28 @@ export default function ResourceForm({
                       </Button>
                     )}
                     
+                    {onSaveDraft && (
+                      <Button 
+                        type="button"
+                        variant="outline"
+                        onClick={handleSaveDraft}
+                        disabled={isSubmitting || isLoading}
+                        className="border-zinc-600 text-zinc-300 hover:bg-zinc-700"
+                      >
+                        {(isSubmitting || isLoading) ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Sauvegarde...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="w-4 h-4 mr-2" />
+                            Sauvegarder
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    
                     <Button 
                       type="submit"
                       disabled={isSubmitting || isLoading}
@@ -730,12 +864,12 @@ export default function ResourceForm({
                       {(isSubmitting || isLoading) ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Création...
+                          {mode === 'edit' ? 'Mise à jour...' : 'Création...'}
                         </>
                       ) : (
                         <>
                           <CheckCircle2 className="w-4 h-4 mr-2" />
-                          Créer le produit
+                          {mode === 'edit' ? 'Mettre à jour le produit' : 'Créer le produit'}
                         </>
                       )}
                     </Button>

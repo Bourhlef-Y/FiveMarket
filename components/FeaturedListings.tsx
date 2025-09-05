@@ -29,6 +29,42 @@ export default function FeaturedListings() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fonction pour extraire la première image comme thumbnail
+  const getThumbnailUrl = (resource: Resource) => {
+    // Si thumbnail_url existe, l'utiliser
+    if (resource.thumbnail_url) {
+      return resource.thumbnail_url;
+    }
+    
+    // Sinon, extraire la première image du champ images
+    if (resource.images && resource.images.length > 0) {
+      const firstImage = resource.images[0];
+      
+      // Si c'est une chaîne JSON, la parser
+      if (typeof firstImage === 'string') {
+        try {
+          const parsed = JSON.parse(firstImage);
+          return parsed.image_url || parsed.image;
+        } catch {
+          return firstImage; // Si ce n'est pas du JSON, utiliser directement
+        }
+      }
+      
+      // Si c'est un objet, utiliser image_url ou image (base64)
+      if (typeof firstImage === 'object') {
+        if (firstImage.image_url) {
+          return firstImage.image_url;
+        }
+        if (firstImage.image) {
+          return firstImage.image; // Base64 image
+        }
+      }
+    }
+    
+    // Fallback vers placeholder
+    return "/placeholder.svg";
+  };
+
   useEffect(() => {
     async function fetchResources() {
       const { data, error } = await supabase
@@ -68,9 +104,10 @@ export default function FeaturedListings() {
         >
           <div className="relative h-48 w-full overflow-hidden">
             <Image
-              src={resource.thumbnail_url || "/placeholder.svg"}
+              src={getThumbnailUrl(resource)}
               alt={resource.title}
               fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
               className="object-cover transition-transform hover:scale-105"
             />
           </div>

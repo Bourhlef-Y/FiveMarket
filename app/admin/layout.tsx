@@ -1,28 +1,23 @@
 "use client";
 
-import { useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
-import { Users, ShoppingBag, UserPlus, LayoutDashboard } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Home, LayoutDashboard, Users, UserPlus, ShoppingBag } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
+import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, profile, loading } = useAuth();
 
   // Protection de la route admin
-  useEffect(() => {
-    if (!loading && (!profile || profile.role !== 'admin')) {
-      router.push('/');
-    }
-  }, [loading, profile, router]);
+  if (!loading && (!profile || profile.role !== 'admin')) {
+    router.push('/');
+    return null;
+  }
 
   if (loading) {
     return (
@@ -30,10 +25,6 @@ export default function AdminLayout({
         <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-[#FF7101]"></div>
       </div>
     );
-  }
-
-  if (!profile || profile.role !== 'admin') {
-    return null;
   }
 
   const isActive = (path: string) => {
@@ -50,8 +41,18 @@ export default function AdminLayout({
               <LayoutDashboard className="h-6 w-6 text-[#FF7101]" />
               <h1 className="text-xl font-semibold text-white">Dashboard Admin</h1>
             </div>
-            <div className="text-sm text-zinc-400">
-              Connecté en tant que {profile.username || user?.email}
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-zinc-400">
+                Connecté en tant que {profile.username || user?.email}
+              </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-zinc-400 hover:text-[#FF7101]"
+                onClick={() => router.push('/')}
+              >
+                <Home className="h-5 w-5" />
+              </Button>
             </div>
           </div>
         </div>

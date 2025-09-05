@@ -73,10 +73,10 @@ export default function NavBar() {
           </Link>
           {profile?.role === 'seller' && (
             <Link 
-              href="/seller/dashboard" 
+              href="/seller/products" 
               className="text-zinc-400 hover:text-[#FF7101] transition-colors"
             >
-              Dashboard
+              Mes Produits
             </Link>
           )}
           <CartIcon />
@@ -122,6 +122,14 @@ export default function NavBar() {
                   >
                     Mon compte
                   </DropdownMenuItem>
+                  {profile?.role === 'admin' && (
+                    <DropdownMenuItem 
+                      className="text-zinc-400 focus:text-white focus:bg-zinc-800 cursor-pointer"
+                      onClick={() => router.push('/admin/users')}
+                    >
+                      Tableau de bord Admin
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem 
                     className="text-zinc-400 focus:text-white focus:bg-zinc-800 cursor-pointer"
                     onClick={handleSignOut}
@@ -184,10 +192,10 @@ export default function NavBar() {
                 </Link>
                 {profile?.role === 'seller' && (
                   <Link 
-                    href="/seller/dashboard" 
+                    href="/seller/products" 
                     className="text-zinc-400 hover:text-[#FF7101] transition-colors text-lg"
                   >
-                    Dashboard Vendeur
+                    Mes Produits
                   </Link>
                 )}
                 <Link 
@@ -215,6 +223,15 @@ export default function NavBar() {
                     >
                       Mon compte
                     </Button>
+                    {profile?.role === 'admin' && (
+                      <Button
+                        variant="ghost"
+                        onClick={() => router.push('/admin/users')}
+                        className="justify-start text-zinc-400 hover:text-white"
+                      >
+                        Tableau de bord Admin
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       onClick={handleSignOut}

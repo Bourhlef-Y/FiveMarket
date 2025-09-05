@@ -15,10 +15,9 @@ import ProductBadges, { useProductBadges } from '@/components/ProductBadges';
 import AddToCartButton from '@/components/AddToCartButton';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/hooks/useToast';
-import { Resource, ResourceImage } from '@/lib/types';
+import { Resource, ResourceImageData } from '@/lib/types';
 
 interface ExtendedResource extends Resource {
-  resource_images: ResourceImage[];
   resource_escrow_info?: {
     requires_cfx_id: boolean;
     requires_email: boolean;
@@ -71,17 +70,19 @@ export default function ProductPage() {
       console.log('Données basiques récupérées:', basicData);
 
       // Puis récupérer les données associées séparément
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, username, avatar_url, role')
+        .select('id, username, avatar, role')
         .eq('id', basicData.author_id)
         .single();
+      
+      if (profileError) {
+        console.error('Erreur récupération profil:', profileError);
+      }
 
-      const { data: imagesData } = await supabase
-        .from('resource_images')
-        .select('id, image_url, is_thumbnail, upload_order')
-        .eq('resource_id', productId)
-        .order('upload_order');
+      // Les images sont maintenant stockées dans le champ 'images' de la ressource
+      const imagesData = basicData.images || [];
+      console.log('Images récupérées:', imagesData);
 
       const { data: escrowData } = await supabase
         .from('resource_escrow_info')
@@ -93,7 +94,6 @@ export default function ProductPage() {
       const combinedData = {
         ...basicData,
         profiles: profileData,
-        resource_images: imagesData || [],
         resource_escrow_info: escrowData
       };
 
@@ -102,8 +102,8 @@ export default function ProductPage() {
       setProduct(combinedData);
       
       // Trier les images par ordre d'upload, thumbnail en premier
-      if (combinedData.resource_images && combinedData.resource_images.length > 0) {
-        combinedData.resource_images.sort((a: any, b: any) => {
+      if (combinedData.images && combinedData.images.length > 0) {
+        combinedData.images.sort((a: any, b: any) => {
           if (a.is_thumbnail && !b.is_thumbnail) return -1;
           if (!a.is_thumbnail && b.is_thumbnail) return 1;
           return a.upload_order - b.upload_order;
@@ -186,8 +186,32 @@ export default function ProductPage() {
     );
   }
 
-  const images = product.resource_images || [];
+  const images = product.images || [];
   const currentImage = images[selectedImageIndex];
+  
+  // Normaliser le format des images (peuvent être des URLs simples, des objets, ou des chaînes JSON)
+  const normalizedImages = images.map((img: any, index) => {
+    if (typeof img === 'string') {
+      // Vérifier si c'est une chaîne JSON
+      if (img.startsWith('{') && img.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(img);
+          return { ...parsed, id: parsed.id || index };
+        } catch (e) {
+          console.error('Erreur parsing JSON image:', e, img);
+          return { image_url: img, id: index, is_thumbnail: index === 0, upload_order: index + 1 };
+        }
+      }
+      // URL simple
+      return { image_url: img, id: index, is_thumbnail: index === 0, upload_order: index + 1 };
+    }
+    return img;
+  });
+  
+  const normalizedCurrentImage = normalizedImages[selectedImageIndex];
+  
+  console.log('Images normalisées:', normalizedImages);
+  console.log('Image actuelle normalisée:', normalizedCurrentImage);
 
   return (
     <div className="min-h-screen">
@@ -215,11 +239,13 @@ export default function ProductPage() {
           {/* Gallery */}
           <div className="space-y-4">
             <div className="relative aspect-video bg-zinc-800 rounded-lg overflow-hidden">
-              {currentImage ? (
+              {normalizedCurrentImage && (normalizedCurrentImage.image_url || normalizedCurrentImage.image) ? (
                 <Image
-                  src={currentImage.image_url}
+                  src={normalizedCurrentImage.image_url || normalizedCurrentImage.image}
                   alt={product.title}
                   fill
+                  sizes="(max-width: 768px) 100vw, 50vw"
+                  priority
                   className="object-cover"
                 />
               ) : (
@@ -229,11 +255,11 @@ export default function ProductPage() {
               )}
             </div>
             
-            {images.length > 1 && (
+            {normalizedImages.length > 1 && (
               <div className="grid grid-cols-4 gap-2">
-                {images.map((image, index) => (
+                {normalizedImages.map((image, index) => (
                   <button
-                    key={image.id}
+                    key={image.id || index}
                     onClick={() => setSelectedImageIndex(index)}
                     className={`relative aspect-video bg-zinc-800 rounded overflow-hidden border-2 transition-colors ${
                       selectedImageIndex === index
@@ -241,12 +267,19 @@ export default function ProductPage() {
                         : 'border-transparent hover:border-zinc-600'
                     }`}
                   >
-                    <Image
-                      src={image.image_url}
-                      alt={`${product.title} - Image ${index + 1}`}
-                      fill
-                      className="object-cover"
-                    />
+                    {(image.image_url || image.image) ? (
+                      <Image
+                        src={image.image_url || image.image}
+                        alt={`${product.title} - Image ${index + 1}`}
+                        fill
+                        sizes="(max-width: 768px) 25vw, 12.5vw"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full">
+                        <Package className="h-8 w-8 text-zinc-600" />
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -283,7 +316,7 @@ export default function ProductPage() {
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12">
-                    <AvatarImage src={product.profiles?.avatar_url || ''} />
+                    <AvatarImage src={product.profiles?.avatar || ''} />
                     <AvatarFallback>
                       {product.profiles?.username?.charAt(0)?.toUpperCase()}
                     </AvatarFallback>
@@ -324,10 +357,7 @@ export default function ProductPage() {
             <div className="space-y-3">
               <AddToCartButton
                 productId={product.id}
-                productTitle={product.title}
                 price={product.price}
-                thumbnailUrl={product.thumbnail_url}
-                authorUsername={product.profiles?.username}
                 className="w-full text-lg py-6"
               />
               

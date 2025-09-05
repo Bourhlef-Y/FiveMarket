@@ -1,61 +1,87 @@
 "use client";
 
-import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Camera } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
-import { toast } from "sonner";
-import ImageCropper from "./ImageCropper";
+import { Button } from "@/components/ui/button";
+import { Edit } from "lucide-react";
+import ImageCropper from './ImageCropper';
+import { supabase } from '@/lib/supabaseClient';
+import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AvatarUploadProps {
   avatar: string | null;
-  onUpload: (avatar: string) => void;
+  onUpload: (url: string) => void;
   email: string;
 }
 
 export default function AvatarUpload({ avatar, onUpload, email }: AvatarUploadProps) {
-  const { user } = useAuth();
+  const [showCropper, setShowCropper] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files || event.target.files.length === 0) return;
-    
-    const file = event.target.files[0];
-    const reader = new FileReader();
-    reader.onload = () => setSelectedImage(reader.result as string);
-    reader.readAsDataURL(file);
-  };
+  const { toast } = useToast();
+  const { user } = useAuth();
 
   const handleCropComplete = async (croppedBlob: Blob) => {
+    if (!user) {
+      toast({
+        title: "Erreur",
+        description: "Vous devez être connecté pour télécharger un avatar",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setUploading(true);
 
-      if (!user) throw new Error("Vous devez être connecté");
+      // Créer un nom de fichier unique avec l'ID de l'utilisateur
+      const timestamp = Date.now();
+      const filePath = `avatar-${user.id}/${timestamp}.jpg`;
 
-      // Convertir le Blob en base64
-      const reader = new FileReader();
-      reader.readAsDataURL(croppedBlob);
-      reader.onload = async () => {
-        const base64Image = reader.result as string;
+      // Supprimer l'ancien avatar s'il existe
+      if (avatar) {
+    
+        const oldFilePath = avatar.split('/').slice(-2).join('/'); // Extrait "avatar-[user_id]/file.jpg"
+        
+        if (oldFilePath.startsWith('avatar-')) {
+          const { error: deleteError } = await supabase.storage
+            .from('avatars')
+            .remove([oldFilePath]);
+          
+          if (deleteError) {
+            console.error('Erreur lors de la suppression de l\'ancien avatar:', deleteError);
+          }
+        }
+      }
 
-        // Mettre à jour le profil avec l'image en base64
-        const { error: updateError } = await supabase
-          .from("profiles")
-          .update({ avatar: base64Image })
-          .eq("id", user.id);
+      // Uploader le nouvel avatar
+  
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, croppedBlob, {
+          contentType: 'image/jpeg',
+          upsert: true
+        });
 
-        if (updateError) throw updateError;
+      if (uploadError) {
+        throw uploadError;
+      }
 
-        onUpload(base64Image);
-        setSelectedImage(null);
-        toast.success("Avatar mis à jour avec succès");
-      };
+      // Obtenir l'URL publique
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      onUpload(publicUrl);
+      setShowCropper(false);
 
     } catch (error: any) {
-      console.error("Erreur lors de l'upload:", error);
-      toast.error(error.message || "Erreur lors de l'upload");
+      console.error('Erreur détaillée:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de télécharger l'avatar. Veuillez réessayer.",
+        variant: "destructive",
+      });
     } finally {
       setUploading(false);
     }
@@ -63,37 +89,30 @@ export default function AvatarUpload({ avatar, onUpload, email }: AvatarUploadPr
 
   return (
     <div className="flex flex-col items-center gap-4">
-      {selectedImage ? (
+      <div className="relative">
+        <Avatar className="h-24 w-24">
+          <AvatarImage src={avatar || undefined} alt="Avatar" />
+          <AvatarFallback className="bg-zinc-700 text-zinc-300">
+            {email.slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <Button
+          size="icon"
+          variant="outline"
+          className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700"
+          onClick={() => setShowCropper(true)}
+          disabled={uploading}
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {showCropper && (
         <ImageCropper
-          imageSrc={selectedImage}
-          onCropComplete={handleCropComplete}
-          onCancel={() => setSelectedImage(null)}
-          aspectRatio={1}
-          circularCrop
+          onComplete={handleCropComplete}
+          onCancel={() => setShowCropper(false)}
+          loading={uploading}
         />
-      ) : (
-        <div className="relative group">
-          <Avatar className="h-24 w-24 cursor-pointer transition-all duration-300 group-hover:brightness-75">
-            <AvatarImage src={avatar || undefined} alt="Avatar" />
-            <AvatarFallback className="text-2xl">{email?.charAt(0).toUpperCase()}</AvatarFallback>
-          </Avatar>
-
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/30 rounded-full">
-            {uploading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-white" />
-            ) : (
-              <Camera className="h-6 w-6 text-white" />
-            )}
-          </div>
-
-          <input
-            type="file"
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={handleImageSelect}
-            disabled={uploading}
-          />
-        </div>
       )}
     </div>
   );

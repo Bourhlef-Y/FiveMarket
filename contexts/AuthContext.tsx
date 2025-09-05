@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { createClient } from '@/lib/supabase-browser';
+import { supabase } from '@/lib/supabaseClient';
 import { User } from '@supabase/supabase-js';
 
 interface Profile {
@@ -27,7 +27,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
       useEffect(() => {
-    const supabase = createClient();
 
     // Écouter les changements de profil
     const profileSubscription = supabase
@@ -40,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           table: 'profiles',
           filter: user ? `id=eq.${user.id}` : undefined
         },
-        (payload) => {
+        (payload: any) => {
           if (payload.new) {
             console.log('📱 Mise à jour du profil détectée:', payload.new);
             setProfile(payload.new as Profile);
@@ -98,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfile({
               id: currentUser.id,
               username: username,
-              email: currentUser.email,
+              email: currentUser.email || null,
               avatar: currentUser.user_metadata?.avatar_url || null,
               role: 'buyer'
             });
@@ -136,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkInitialSession();
 
     // Écouter les changements d'authentification
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
       console.log('🔄 Auth changement détecté:', event);
       if (session?.user) {
         console.log('📱 Session dans listener: Existe');
@@ -181,7 +180,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loading]);
 
   const signOut = async () => {
-    const supabase = createClient();
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Erreur déconnexion:', error);

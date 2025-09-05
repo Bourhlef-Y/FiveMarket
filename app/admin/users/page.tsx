@@ -2,13 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Home } from "lucide-react";
+import { useRouter } from "next/navigation";
 import UserTable from '@/components/admin/UserTable';
 import { toast } from '@/hooks/useToast';
 
 interface User {
   id: string;
-  username: string;
-  avatar_url: string | null;
+  username: string | null;
+  avatar: string | null;
   role: 'buyer' | 'seller' | 'admin';
   created_at: string;
   discord_username: string | null;
@@ -17,6 +20,7 @@ interface User {
 }
 
 export default function AdminUsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -70,8 +74,16 @@ export default function AdminUsersPage() {
 
   return (
     <Card className="bg-zinc-800/50 border-zinc-700">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl text-white">Gestion des Utilisateurs</CardTitle>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="text-zinc-400 hover:text-[#FF7101]"
+          onClick={() => router.push('/')}
+        >
+          <Home className="h-5 w-5" />
+        </Button>
       </CardHeader>
       <CardContent>
         {loading ? (

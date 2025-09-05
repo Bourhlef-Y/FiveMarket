@@ -1,22 +1,27 @@
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
 import { Teko } from 'next/font/google'
-import './globals.css'
-import { Toaster } from '@/components/ui/toaster'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { CartProvider } from '@/contexts/CartContext'
-import DebugBox from '@/components/DebugBox'
+import { Toaster } from '@/components/ui/toaster'
+import { ThemeProvider } from '@/components/theme-provider'
+import './globals.css'
 
-// Configuration de la police Teko pour le logo
-const teko = Teko({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
+const inter = Inter({ 
+  subsets: ['latin'], 
+  variable: '--font-inter',
+  display: 'swap'
+})
+
+const teko = Teko({ 
+  subsets: ['latin'], 
   variable: '--font-teko',
-  display: 'swap',
+  display: 'swap'
 })
 
 export const metadata: Metadata = {
   title: 'FiveMarket',
-  description: 'FiveMarket',
+  description: 'Marketplace pour ressources FiveM',
 }
 
 export default function RootLayout({
@@ -25,15 +30,24 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={`${teko.variable} bg-zinc-900 text-zinc-100`} suppressHydrationWarning>
-        <AuthProvider>
-          <CartProvider>
-            {children}
-            <Toaster />
-            <DebugBox />
-          </CartProvider>
-        </AuthProvider>
+    <html lang="fr" suppressHydrationWarning>
+      <body 
+        className={`${inter.variable} ${teko.variable} dark bg-background text-foreground`}
+        suppressHydrationWarning
+      >
+        <ThemeProvider 
+          attribute="class" 
+          defaultTheme="dark" 
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <AuthProvider>
+            <CartProvider>
+              {children}
+              <Toaster />
+            </CartProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

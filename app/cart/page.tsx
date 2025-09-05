@@ -13,7 +13,7 @@ import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 
 export default function CartPage() {
   const router = useRouter();
-  const { state, clearCart } = useCart();
+  const { items, loading, itemCount, total, clearCart } = useCart();
   const [showClearDialog, setShowClearDialog] = useState(false);
 
   const handleClearCart = async () => {
@@ -26,7 +26,7 @@ export default function CartPage() {
   };
 
   // Panier vide
-  if (state.items.length === 0 && !state.isLoading) {
+  if (items.length === 0 && !loading) {
     return (
       <div className="min-h-screen">
         <NavBar />
@@ -86,7 +86,7 @@ export default function CartPage() {
               <div>
                 <h1 className="text-3xl font-bold text-white">Mon Panier</h1>
                 <p className="text-zinc-400">
-                  {state.itemCount} article{state.itemCount > 1 ? 's' : ''}
+                  {itemCount} article{itemCount > 1 ? 's' : ''}
                 </p>
               </div>
             </div>
@@ -95,7 +95,7 @@ export default function CartPage() {
             <Button
               variant="outline"
               onClick={() => setShowClearDialog(true)}
-              disabled={state.isLoading}
+              disabled={loading}
               className="border-zinc-600 text-zinc-300 hover:text-red-400 hover:border-red-400"
             >
               <Trash2 className="h-4 w-4 mr-2" />
@@ -106,7 +106,7 @@ export default function CartPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Liste des articles */}
             <div className="lg:col-span-2 space-y-4">
-              {state.items.map((item) => (
+              {items.map((item) => (
                 <CartItem key={item.id} item={item} />
               ))}
             </div>
@@ -121,8 +121,8 @@ export default function CartPage() {
                   {/* Détail des prix */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-zinc-300">
-                      <span>Sous-total ({state.itemCount} article{state.itemCount > 1 ? 's' : ''})</span>
-                      <span>{state.total === 0 ? 'Gratuit' : `${state.total.toFixed(2)}€`}</span>
+                      <span>Sous-total ({itemCount} article{itemCount > 1 ? 's' : ''})</span>
+                      <span>{total === 0 ? 'Gratuit' : `${total.toFixed(2)}€`}</span>
                     </div>
                     
                     <div className="flex justify-between text-zinc-300">
@@ -137,17 +137,17 @@ export default function CartPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-lg font-semibold text-white">Total</span>
                     <span className="text-2xl font-bold text-[#FF7101]">
-                      {state.total === 0 ? 'Gratuit' : `${state.total.toFixed(2)}€`}
+                      {total === 0 ? 'Gratuit' : `${total.toFixed(2)}€`}
                     </span>
                   </div>
 
                   {/* Bouton de commande */}
                   <Button
                     onClick={handleCheckout}
-                    disabled={state.isLoading}
+                    disabled={loading}
                     className="w-full bg-[#FF7101] hover:bg-[#FF7101]/90 text-white text-lg py-6"
                   >
-                    {state.total === 0 ? 'Télécharger' : 'Passer commande'}
+                    {total === 0 ? 'Télécharger' : 'Passer commande'}
                   </Button>
 
                   {/* Avantages */}

@@ -119,4 +119,27 @@ export function sanitizeResourcePayload(data: ResourceCreatePayload): ResourceCr
   }
 }
 
+// Fonction pour déterminer si un produit est complet (tous les champs obligatoires remplis)
+export function isResourceComplete(data: Partial<ResourceCreatePayload>): boolean {
+  const errors = validateResourcePayload(data);
+  
+  // Un produit est complet si :
+  // 1. Tous les champs obligatoires sont remplis (pas d'erreurs de validation)
+  // 2. Le framework est spécifié
+  // 3. La catégorie est spécifiée
+  // 4. Si c'est un escrow, les instructions de livraison sont valides (optionnelles)
+  
+  const hasRequiredFields = !errors.title && !errors.description && !errors.price && !errors.resource_type;
+  const hasFramework = data.framework && !errors.framework;
+  const hasCategory = data.category && !errors.category;
+  
+  let hasEscrowInfo = true;
+  if (data.resource_type === 'escrow') {
+    // Les instructions de livraison sont optionnelles
+    hasEscrowInfo = !errors.escrowInfo?.delivery_instructions;
+  }
+  
+  return hasRequiredFields && hasFramework && hasCategory && hasEscrowInfo;
+}
+
 

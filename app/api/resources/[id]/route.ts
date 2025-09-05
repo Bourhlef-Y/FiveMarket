@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { isResourceComplete } from '@/lib/resourceValidationServer';
 
 // GET - Récupérer une ressource spécifique
 export async function GET(
@@ -9,7 +10,32 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: any) {
+            try {
+              cookieStore.set({ name, value, ...options });
+            } catch (error) {
+              console.error('Erreur lors de la définition du cookie:', error);
+            }
+          },
+          remove(name: string, options: any) {
+            try {
+              cookieStore.set({ name, value: '', ...options });
+            } catch (error) {
+              console.error('Erreur lors de la suppression du cookie:', error);
+            }
+          },
+        },
+      }
+    );
     const { id: resourceId } = await context.params;
     
     const { data: resource, error } = await supabase
@@ -19,24 +45,6 @@ export async function GET(
         profiles:author_id (
           username,
           avatar
-        ),
-        resource_images (
-          id,
-          image_url,
-          is_thumbnail,
-          upload_order
-        ),
-        resource_files (
-          id,
-          file_name,
-          file_size,
-          created_at
-        ),
-        resource_escrow_info (
-          requires_cfx_id,
-          requires_email,
-          requires_username,
-          delivery_instructions
         )
       `)
       .eq('id', resourceId)
@@ -74,7 +82,32 @@ export async function PUT(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: any) {
+            try {
+              cookieStore.set({ name, value, ...options });
+            } catch (error) {
+              console.error('Erreur lors de la définition du cookie:', error);
+            }
+          },
+          remove(name: string, options: any) {
+            try {
+              cookieStore.set({ name, value: '', ...options });
+            } catch (error) {
+              console.error('Erreur lors de la suppression du cookie:', error);
+            }
+          },
+        },
+      }
+    );
     const { id: resourceId } = await context.params;
     
     // Vérifier l'authentification
@@ -186,7 +219,32 @@ export async function PATCH(
     // 2. Fallback: essayer avec les cookies seulement si pas de Bearer token
     if (!user && !authHeader) {
       try {
-        const supabaseCookies = createRouteHandlerClient({ cookies });
+        const cookieStore = await cookies();
+        const supabaseCookies = createServerClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          {
+            cookies: {
+              get(name: string) {
+                return cookieStore.get(name)?.value;
+              },
+              set(name: string, value: string, options: any) {
+                try {
+                  cookieStore.set({ name, value, ...options });
+                } catch (error) {
+                  console.error('Erreur lors de la définition du cookie:', error);
+                }
+              },
+              remove(name: string, options: any) {
+                try {
+                  cookieStore.set({ name, value: '', ...options });
+                } catch (error) {
+                  console.error('Erreur lors de la suppression du cookie:', error);
+                }
+              },
+            },
+          }
+        );
         const { data: { user: authUser }, error: authError } = await supabaseCookies.auth.getUser();
         
         if (!authError && authUser) {
@@ -229,6 +287,34 @@ export async function PATCH(
     }
     
     const body = await request.json();
+    
+    // Si on essaie de passer en "pending", vérifier que le produit est complet
+    if (body.status === 'pending') {
+      // Récupérer les données actuelles de la ressource
+      const { data: currentResource, error: currentError } = await supabase
+        .from('resources')
+        .select('*')
+        .eq('id', resourceId)
+        .single();
+      
+      if (currentError) {
+        return NextResponse.json(
+          { error: 'Erreur lors de la récupération de la ressource' },
+          { status: 500 }
+        );
+      }
+      
+      // Fusionner les données actuelles avec les nouvelles données
+      const mergedData = { ...currentResource, ...body };
+      
+      // Vérifier si le produit est complet
+      if (!isResourceComplete(mergedData)) {
+        return NextResponse.json(
+          { error: 'Le produit doit être complet pour être soumis en attente de validation' },
+          { status: 400 }
+        );
+      }
+    }
     
     // Filtrer les champs autorisés pour mise à jour
     const allowedFields = [
@@ -334,7 +420,32 @@ export async function DELETE(
     // 2. Fallback: essayer avec les cookies seulement si pas de Bearer token
     if (!user && !authHeader) {
       try {
-        const supabaseCookies = createRouteHandlerClient({ cookies });
+        const cookieStore = await cookies();
+        const supabaseCookies = createServerClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          {
+            cookies: {
+              get(name: string) {
+                return cookieStore.get(name)?.value;
+              },
+              set(name: string, value: string, options: any) {
+                try {
+                  cookieStore.set({ name, value, ...options });
+                } catch (error) {
+                  console.error('Erreur lors de la définition du cookie:', error);
+                }
+              },
+              remove(name: string, options: any) {
+                try {
+                  cookieStore.set({ name, value: '', ...options });
+                } catch (error) {
+                  console.error('Erreur lors de la suppression du cookie:', error);
+                }
+              },
+            },
+          }
+        );
         const { data: { user: authUser }, error: authError } = await supabaseCookies.auth.getUser();
         
         if (!authError && authUser) {

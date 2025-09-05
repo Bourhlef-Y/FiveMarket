@@ -18,6 +18,7 @@ interface Resource {
   resource_type?: 'escrow' | 'non_escrow';
   download_count?: number;
   thumbnail_url?: string;
+  images?: any[];
   profiles?: {
     username: string;
     avatar: string;
@@ -29,13 +30,49 @@ interface ResourceCardProps {
 }
 
 export default function ResourceCard({ resource }: ResourceCardProps) {
+  // Fonction pour extraire la première image comme thumbnail
+  const getThumbnailUrl = () => {
+    // Si thumbnail_url existe, l'utiliser
+    if (resource.thumbnail_url) {
+      return resource.thumbnail_url;
+    }
+    
+    // Sinon, extraire la première image du champ images
+    if (resource.images && resource.images.length > 0) {
+      const firstImage = resource.images[0];
+      
+      // Si c'est une chaîne JSON, la parser
+      if (typeof firstImage === 'string') {
+        try {
+          const parsed = JSON.parse(firstImage);
+          return parsed.image_url || parsed.image;
+        } catch {
+          return firstImage; // Si ce n'est pas du JSON, utiliser directement
+        }
+      }
+      
+      // Si c'est un objet, utiliser image_url ou image (base64)
+      if (typeof firstImage === 'object') {
+        if (firstImage.image_url) {
+          return firstImage.image_url;
+        }
+        if (firstImage.image) {
+          return firstImage.image; // Base64 image
+        }
+      }
+    }
+    // Fallback vers placeholder
+    return "/placeholder.svg";
+  };
+
   return (
     <Card className="bg-zinc-800/50 border-zinc-700 overflow-hidden transition-all hover:shadow-lg hover:shadow-[#FF7101]/10 hover:border-[#FF7101]/50">
       <div className="relative h-48 w-full overflow-hidden">
         <Image
-          src={resource.thumbnail_url || "/placeholder.svg"}
+          src={getThumbnailUrl()}
           alt={resource.title}
           fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           className="object-cover transition-transform hover:scale-105"
         />
         
@@ -126,10 +163,7 @@ export default function ResourceCard({ resource }: ResourceCardProps) {
         <div className="flex flex-col gap-2 min-w-0 flex-1">
           <AddToCartButton
             productId={resource.id}
-            productTitle={resource.title}
             price={resource.price}
-            thumbnailUrl={resource.thumbnail_url}
-            authorUsername={resource.profiles?.username}
             className="w-full text-sm"
           />
           <Button asChild variant="outline" size="sm" className="w-full border-zinc-600 text-zinc-300">
