@@ -3,7 +3,6 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
-  console.log('API /api/seller/products GET appelée');
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -55,7 +54,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    // Construire la requête
+    // Construire la requête de base
     let query = supabase
       .from('resources')
       .select(`
@@ -70,21 +69,15 @@ export async function GET(request: Request) {
         created_at,
         updated_at,
         approved_at,
-        approved_by
-      `)
+        approved_by,
+        images
+      `, { count: 'exact' })
       .eq('author_id', user.id)
       .order('created_at', { ascending: false });
 
-    // Appliquer le filtre de statut
+    // Appliquer le filtre de statut si fourni
     if (status) {
       query = query.eq('status', status);
-    }
-
-    // Compter le total
-    const { count, error: countError } = await query;
-    if (countError) {
-      console.error('Erreur comptage produits:', countError);
-      throw countError;
     }
 
     // Appliquer la pagination
@@ -93,14 +86,12 @@ export async function GET(request: Request) {
     query = query.range(from, to);
 
     // Exécuter la requête
-    const { data: products, error: productsError } = await query;
+    const { data: products, error: productsError, count } = await query;
 
     if (productsError) {
       console.error('Erreur récupération produits:', productsError);
-      throw productsError;
+      return NextResponse.json({ error: 'Erreur base de données' }, { status: 500 });
     }
-
-    console.log('Produits vendeur récupérés:', products?.length || 0);
 
     return NextResponse.json({
       products: products || [],

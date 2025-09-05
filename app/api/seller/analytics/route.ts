@@ -117,17 +117,8 @@ export async function GET(request: Request) {
     const rejectedProducts = products?.filter(p => p.status === 'rejected').length || 0;
 
     const totalSales = products?.reduce((sum, p) => sum + (p.download_count || 0), 0) || 0;
-    const totalRevenue = products?.reduce((sum, p) => sum + (p.price * (p.download_count || 0)), 0) || 0;
 
-    // Calculer les revenus de la période
-    const periodRevenue = orders?.reduce((sum, o) => sum + o.total_price, 0) || 0;
-    const periodSales = orders?.length || 0;
-
-    // Calculer les revenus mensuels (simulation)
-    const monthlyRevenue = Math.floor(totalRevenue * 0.1); // 10% des revenus totaux ce mois
-    const monthlySales = Math.floor(totalSales * 0.1); // 10% des ventes totales ce mois
-
-    // Top produits
+    // Top produits (sans revenus)
     const topProducts = products
       ?.filter(p => p.status === 'approved')
       .sort((a, b) => (b.download_count || 0) - (a.download_count || 0))
@@ -135,60 +126,34 @@ export async function GET(request: Request) {
       .map(p => ({
         id: p.id,
         title: p.title,
-        sales: p.download_count || 0,
-        revenue: p.price * (p.download_count || 0),
         downloads: p.download_count || 0
       })) || [];
 
-    // Données mensuelles (simulation)
-    const monthlyData = [
-      { month: 'Jan', revenue: Math.floor(totalRevenue * 0.15), sales: Math.floor(totalSales * 0.15) },
-      { month: 'Fév', revenue: Math.floor(totalRevenue * 0.18), sales: Math.floor(totalSales * 0.18) },
-      { month: 'Mar', revenue: Math.floor(totalRevenue * 0.12), sales: Math.floor(totalSales * 0.12) },
-      { month: 'Avr', revenue: Math.floor(totalRevenue * 0.20), sales: Math.floor(totalSales * 0.20) },
-      { month: 'Mai', revenue: Math.floor(totalRevenue * 0.22), sales: Math.floor(totalSales * 0.22) },
-      { month: 'Juin', revenue: Math.floor(totalRevenue * 0.13), sales: Math.floor(totalSales * 0.13) }
-    ];
-
-    // Données par catégorie
+    // Données par catégorie (sans revenus)
     const categoryData = products?.reduce((acc: any[], product) => {
       const existing = acc.find(cat => cat.category === product.category);
       if (existing) {
         existing.count += 1;
-        existing.revenue += product.price * (product.download_count || 0);
       } else {
         acc.push({
           category: product.category,
-          count: 1,
-          revenue: product.price * (product.download_count || 0)
+          count: 1
         });
       }
       return acc;
     }, []) || [];
 
-    // Calculer les tendances (simulation)
-    const revenueGrowth = 12.5; // +12.5%
-    const salesGrowth = 8.3; // +8.3%
-    const productGrowth = 25.0; // +25%
+    // Calculer les revenus du vendeur (80% des ventes)
+    const sellerRevenue = products?.reduce((sum, p) => sum + (p.price * (p.download_count || 0) * 0.8), 0) || 0;
+    const platformRevenue = products?.reduce((sum, p) => sum + (p.price * (p.download_count || 0) * 0.2), 0) || 0;
 
-         const analyticsData = {
-       revenue: {
-         total: totalRevenue,
-         monthly: monthlyRevenue,
-         weekly: Math.floor(monthlyRevenue / 4),
-         daily: Math.floor(monthlyRevenue / 30)
-       },
-       platformRevenue: {
-         total: totalRevenue * 0.2, // 20% pour la plateforme
-         monthly: monthlyRevenue * 0.2,
-         weekly: Math.floor(monthlyRevenue / 4) * 0.2,
-         daily: Math.floor(monthlyRevenue / 30) * 0.2
-       },
+    const analyticsData = {
       sales: {
-        total: totalSales,
-        monthly: monthlySales,
-        weekly: Math.floor(monthlySales / 4),
-        daily: Math.floor(monthlySales / 30)
+        total: totalSales
+      },
+      revenue: {
+        total: sellerRevenue,
+        platform: platformRevenue
       },
       products: {
         total: totalProducts,
@@ -198,13 +163,7 @@ export async function GET(request: Request) {
       },
       performance: {
         topProducts,
-        monthlyData,
         categoryData
-      },
-      trends: {
-        revenueGrowth,
-        salesGrowth,
-        productGrowth
       }
     };
 

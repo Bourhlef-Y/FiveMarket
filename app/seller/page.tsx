@@ -21,23 +21,18 @@ import {
   Calendar,
   Star,
   Download,
-  MessageSquare
+  MessageSquare,
+  LogOut
 } from 'lucide-react';
 
 interface SellerStats {
   totalProducts: number;
   totalSales: number;
-  totalRevenue: number;
-  pendingOrders: number;
   approvedProducts: number;
   pendingProducts: number;
   rejectedProducts: number;
-  monthlyRevenue: number;
-  monthlySales: number;
-  platformRevenue?: {
-    total: number;
-    monthly: number;
-  };
+  sellerRevenue: number;
+  platformRevenue: number;
 }
 
 interface Product {
@@ -50,6 +45,7 @@ interface Product {
   updated_at: string;
   category: string;
   framework: string;
+  images?: string;
 }
 
 interface Order {
@@ -69,17 +65,16 @@ export default function SellerDashboard() {
   const [stats, setStats] = useState<SellerStats>({
     totalProducts: 0,
     totalSales: 0,
-    totalRevenue: 0,
-    pendingOrders: 0,
     approvedProducts: 0,
     pendingProducts: 0,
     rejectedProducts: 0,
-    monthlyRevenue: 0,
-    monthlySales: 0
+    sellerRevenue: 0,
+    platformRevenue: 0
   });
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [lastLoadTime, setLastLoadTime] = useState<number>(0);
 
   useEffect(() => {
     if (!loading && profile?.role !== 'seller') {
@@ -99,33 +94,43 @@ export default function SellerDashboard() {
 
   const loadSellerData = async () => {
     try {
+      // Cache simple : ne pas recharger si les données ont été chargées il y a moins de 30 secondes
+      const now = Date.now();
+      if (lastLoadTime && (now - lastLoadTime) < 30000) {
+        return;
+      }
+
       setLoadingData(true);
       
-      // Charger les statistiques
-      const statsResponse = await fetch('/api/seller/stats');
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
+      // Charger toutes les données en parallèle pour réduire le temps de chargement
+      const [statsResponse, productsResponse, ordersResponse] = await Promise.allSettled([
+        fetch('/api/seller/stats'),
+        fetch('/api/seller/products?limit=5'),
+        fetch('/api/seller/orders?limit=5')
+      ]);
+
+      // Traiter les statistiques
+      if (statsResponse.status === 'fulfilled' && statsResponse.value.ok) {
+        const statsData = await statsResponse.value.json();
         setStats(statsData);
       } else {
-        console.error('Erreur API statistiques:', statsResponse.status);
+        console.error('Erreur API statistiques:', statsResponse.status === 'rejected' ? statsResponse.reason : statsResponse.value.status);
       }
 
-      // Charger les produits
-      const productsResponse = await fetch('/api/seller/products?limit=5');
-      if (productsResponse.ok) {
-        const productsData = await productsResponse.json();
+      // Traiter les produits
+      if (productsResponse.status === 'fulfilled' && productsResponse.value.ok) {
+        const productsData = await productsResponse.value.json();
         setProducts(productsData.products || []);
       } else {
-        console.error('Erreur API produits:', productsResponse.status);
+        console.error('Erreur API produits:', productsResponse.status === 'rejected' ? productsResponse.reason : productsResponse.value.status);
       }
 
-      // Charger les commandes récentes
-      const ordersResponse = await fetch('/api/seller/orders?limit=5');
-      if (ordersResponse.ok) {
-        const ordersData = await ordersResponse.json();
+      // Traiter les commandes
+      if (ordersResponse.status === 'fulfilled' && ordersResponse.value.ok) {
+        const ordersData = await ordersResponse.value.json();
         setOrders(ordersData.orders || []);
       } else {
-        console.error('Erreur API commandes:', ordersResponse.status);
+        console.error('Erreur API commandes:', ordersResponse.status === 'rejected' ? ordersResponse.reason : ordersResponse.value.status);
       }
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
@@ -136,6 +141,7 @@ export default function SellerDashboard() {
       });
     } finally {
       setLoadingData(false);
+      setLastLoadTime(Date.now());
     }
   };
 
@@ -172,7 +178,10 @@ export default function SellerDashboard() {
   if (loading || loadingData) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#FF7101] mx-auto"></div>
+        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF7101]"></div>
+          <p className="text-gray-400 text-sm">Chargement du dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -235,12 +244,12 @@ export default function SellerDashboard() {
         <Card className="bg-zinc-800/50 border-zinc-700">
           <CardContent className="p-6">
             <div className="flex items-center space-x-4">
-              <div className="p-3 bg-emerald-500/20 rounded-lg">
-                <DollarSign className="w-6 h-6 text-emerald-400" />
+              <div className="p-3 bg-yellow-500/20 rounded-lg">
+                <ShoppingCart className="w-6 h-6 text-yellow-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-400">Revenus Plateforme</p>
-                <p className="text-2xl font-bold text-white">{formatPrice(stats.platformRevenue?.total || stats.totalRevenue * 0.2)}</p>
+                <p className="text-sm text-gray-400">Produits en Attente</p>
+                <p className="text-2xl font-bold text-white">{stats.pendingProducts}</p>
               </div>
             </div>
           </CardContent>
@@ -249,12 +258,15 @@ export default function SellerDashboard() {
         <Card className="bg-zinc-800/50 border-zinc-700">
           <CardContent className="p-6">
             <div className="flex items-center space-x-4">
-              <div className="p-3 bg-yellow-500/20 rounded-lg">
-                <ShoppingCart className="w-6 h-6 text-yellow-400" />
+              <div className="p-3 bg-emerald-500/20 rounded-lg">
+                <DollarSign className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-400">Commandes en Attente</p>
-                <p className="text-2xl font-bold text-white">{stats.pendingOrders}</p>
+                <p className="text-sm text-gray-400">Mes Revenus</p>
+                <p className="text-2xl font-bold text-white">{formatPrice(stats.sellerRevenue)}</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Revenus générés
+                </p>
               </div>
             </div>
           </CardContent>
@@ -324,7 +336,7 @@ export default function SellerDashboard() {
             <Button 
               variant="outline" 
               className="w-full justify-start border-zinc-600 text-zinc-300 hover:bg-zinc-700"
-              onClick={() => router.push('/sell')}
+              onClick={() => router.push('/seller/products')}
             >
               <Edit className="w-4 h-4 mr-2" />
               Gérer mes produits
@@ -336,6 +348,14 @@ export default function SellerDashboard() {
             >
               <BarChart3 className="w-4 h-4 mr-2" />
               Voir les analyses
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start border-zinc-600 text-zinc-300 hover:bg-zinc-700"
+              onClick={() => router.push('/')}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Quitter le dashboard
             </Button>
           </CardContent>
         </Card>

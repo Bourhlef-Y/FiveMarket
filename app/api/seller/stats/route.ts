@@ -74,38 +74,19 @@ export async function GET(request: Request) {
     const rejectedProducts = products?.filter(p => p.status === 'rejected').length || 0;
     
     const totalSales = products?.reduce((sum, p) => sum + (p.download_count || 0), 0) || 0;
-    const totalRevenue = products?.reduce((sum, p) => sum + (p.price * (p.download_count || 0)), 0) || 0;
 
-    // Calculer les revenus du mois en cours
-    const currentMonth = new Date();
-    currentMonth.setDate(1);
-    currentMonth.setHours(0, 0, 0, 0);
-    
-    const monthlyRevenue = products?.reduce((sum, p) => {
-      // Simulation des ventes du mois (en réalité, il faudrait une table des ventes)
-      const monthlyDownloads = Math.floor((p.download_count || 0) * 0.1); // 10% des téléchargements ce mois
-      return sum + (p.price * monthlyDownloads);
-    }, 0) || 0;
-
-    const monthlySales = Math.floor(totalSales * 0.1); // 10% des ventes ce mois
-
-    // Récupérer les commandes en attente (simulation)
-    const pendingOrders = 0; // À implémenter avec une vraie table des commandes
+    // Calculer les revenus du vendeur (80% des ventes)
+    const sellerRevenue = products?.reduce((sum, p) => sum + (p.price * (p.download_count || 0) * 0.8), 0) || 0;
+    const platformRevenue = products?.reduce((sum, p) => sum + (p.price * (p.download_count || 0) * 0.2), 0) || 0;
 
     const stats = {
       totalProducts,
       totalSales,
-      totalRevenue,
-      pendingOrders,
       approvedProducts,
       pendingProducts,
       rejectedProducts,
-      monthlyRevenue,
-      monthlySales,
-      platformRevenue: {
-        total: totalRevenue * 0.2, // 20% pour la plateforme
-        monthly: monthlyRevenue * 0.2
-      }
+      sellerRevenue,
+      platformRevenue
     };
 
     console.log('Statistiques vendeur calculées:', stats);

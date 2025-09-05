@@ -50,9 +50,7 @@ export async function GET(request: NextRequest) {
       .gte('created_at', startDate.toISOString());
 
     // Calculer les métriques
-    const totalRevenue = orders?.reduce((sum, order) => sum + order.amount, 0) || 0;
     const totalSales = orders?.length || 0;
-    const averageOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
     
     // Calculer les clients uniques et récurrents
     const uniqueBuyers = new Set(orders?.map(o => o.buyer_id)).size;
@@ -63,17 +61,6 @@ export async function GET(request: NextRequest) {
     const repeatCustomers = Object.values(buyerCounts).filter(count => count > 1).length;
     const repeatCustomerRate = uniqueBuyers > 0 ? (repeatCustomers / uniqueBuyers) * 100 : 0;
 
-    // Calculer le rang marketplace
-    const sellerRevenues: { [key: string]: number } = {};
-    allSellers?.forEach(order => {
-      const sellerId = order.resources.author_id;
-      sellerRevenues[sellerId] = (sellerRevenues[sellerId] || 0) + order.amount;
-    });
-    
-    const sortedSellers = Object.entries(sellerRevenues)
-      .sort(([, a], [, b]) => b - a);
-    const marketplaceRank = sortedSellers.findIndex(([sellerId]) => sellerId === userId) + 1;
-
     // Métriques simulées (à remplacer par de vraies données)
     const totalViews = Math.floor(Math.random() * 10000) + 1000;
     const conversionRate = totalViews > 0 ? (totalSales / totalViews) * 100 : 0;
@@ -83,12 +70,10 @@ export async function GET(request: NextRequest) {
     const performanceScore = Math.min(100, Math.round(
       (conversionRate * 2) +
       (customerSatisfaction * 15) +
-      (repeatCustomerRate * 0.5) +
-      (Math.min(marketplaceRank <= 10 ? 20 : Math.max(0, 20 - marketplaceRank), 20))
+      (repeatCustomerRate * 0.5)
     ));
 
     // Objectifs mensuels (à personnaliser selon les besoins)
-    const monthlyRevenueGoal = 1000;
     const monthlySalesGoal = 50;
     
     // Calculer les progrès du mois en cours
@@ -98,25 +83,20 @@ export async function GET(request: NextRequest) {
     
     const { data: monthlyOrders } = await supabase
       .from('orders')
-      .select('amount, resources!inner(author_id)')
+      .select('resources!inner(author_id)')
       .eq('resources.author_id', userId)
       .eq('status', 'completed')
       .gte('created_at', currentMonth.toISOString());
 
-    const monthlyRevenue = monthlyOrders?.reduce((sum, order) => sum + order.amount, 0) || 0;
     const monthlySales = monthlyOrders?.length || 0;
 
     const metrics = {
       conversionRate,
-      averageOrderValue,
       customerSatisfaction,
       repeatCustomerRate,
-      marketplaceRank: marketplaceRank || 999,
       totalCustomers: uniqueBuyers,
       performanceScore,
       goals: {
-        revenueGoal: monthlyRevenueGoal,
-        revenueAchieved: monthlyRevenue,
         salesGoal: monthlySalesGoal,
         salesAchieved: monthlySales
       }

@@ -37,8 +37,7 @@ interface Product {
   updated_at: string;
   category: string;
   framework: string;
-  tags: string[];
-  image_url?: string;
+  images?: string;
 }
 
 export default function SellerProducts() {
@@ -55,6 +54,7 @@ export default function SellerProducts() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [lastLoadTime, setLastLoadTime] = useState<number>(0);
 
   useEffect(() => {
     if (!loading && profile?.role !== 'seller') {
@@ -89,6 +89,12 @@ export default function SellerProducts() {
 
   const loadProducts = async () => {
     try {
+      // Cache simple : ne pas recharger si les données ont été chargées il y a moins de 10 secondes
+      const now = Date.now();
+      if (lastLoadTime && (now - lastLoadTime) < 10000) {
+        return;
+      }
+
       setLoadingData(true);
       
       const params = new URLSearchParams({
@@ -106,6 +112,7 @@ export default function SellerProducts() {
         setProducts(data.products || []);
         setTotalPages(data.totalPages || 1);
         setTotalCount(data.totalCount || 0);
+        setLastLoadTime(now);
       } else {
         console.error('Erreur API produits:', response.status, response.statusText);
         toast({
@@ -458,13 +465,6 @@ export default function SellerProducts() {
                         </div>
                       </div>
                       
-                      <div className="flex flex-wrap gap-2">
-                        {product.tags.map((tag) => (
-                          <Badge key={tag} variant="outline" className="border-zinc-600 text-zinc-400">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
                     </div>
                     
                     <div className="flex items-center space-x-2 ml-6">

@@ -70,19 +70,16 @@ export async function GET(request: NextRequest) {
           thumbnail_url: resource.thumbnail_url,
           price: resource.price,
           downloads: resource.download_count || 0,
-          revenue: 0,
-          sales: 0,
-          views: Math.floor(Math.random() * 1000) + 100 // Placeholder
+          sales: 0
         };
       }
       
-      productStats[resource.id].revenue += order.amount;
       productStats[resource.id].sales += 1;
     });
 
-    // Convertir en tableau et trier par revenus
+    // Convertir en tableau et trier par ventes
     const topProducts = Object.values(productStats)
-      .sort((a: any, b: any) => b.revenue - a.revenue)
+      .sort((a: any, b: any) => b.sales - a.sales)
       .slice(0, 10)
       .map((product: any, index: number) => ({
         ...product,

@@ -73,10 +73,10 @@ export default function NavBar() {
           </Link>
           {profile?.role === 'seller' && (
             <Link 
-              href="/seller/products" 
+              href="/seller"
               className="text-zinc-400 hover:text-[#FF7101] transition-colors"
             >
-              Mes Produits
+              Tableau de bord
             </Link>
           )}
           <CartIcon />
@@ -192,10 +192,10 @@ export default function NavBar() {
                 </Link>
                 {profile?.role === 'seller' && (
                   <Link 
-                    href="/seller/products" 
+                    href="/seller" 
                     className="text-zinc-400 hover:text-[#FF7101] transition-colors text-lg"
                   >
-                    Mes Produits
+                    Tableau de bord
                   </Link>
                 )}
                 <Link 

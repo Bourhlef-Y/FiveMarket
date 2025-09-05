@@ -67,8 +67,7 @@ export async function GET(
         download_count,
         category,
         framework,
-        tags,
-        image_url,
+        images,
         created_at,
         updated_at,
         author_id
@@ -173,8 +172,7 @@ export async function PATCH(
     if (body.price !== undefined) updateData.price = body.price;
     if (body.category !== undefined) updateData.category = body.category;
     if (body.framework !== undefined) updateData.framework = body.framework;
-    if (body.tags !== undefined) updateData.tags = body.tags;
-    if (body.image_url !== undefined) updateData.image_url = body.image_url;
+    if (body.images !== undefined) updateData.images = body.images;
 
     // Mettre à jour le produit
     const { data: updatedProduct, error: updateError } = await supabase
