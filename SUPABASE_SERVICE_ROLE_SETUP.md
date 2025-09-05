@@ -12,7 +12,7 @@ Ajouter dans votre fichier `.env.local` :
 
 ```env
 # Clé Service Role (différente de la clé publique Anon)
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVseWFzeHRpa2Nqb3hmZXZyYnNnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDYzODc0MiwiZXhwIjoyMDcwMjE0NzQyfQ.jNSd1eN8UpSCa9UUG6xy4cMOfYuyi22-3GznPBlrPkQ
+SUPABASE_SERVICE_ROLE_KEY=**************
 ```
 
 ### 2. Obtenir la Service Role Key
