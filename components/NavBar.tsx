@@ -7,6 +7,7 @@ import { Menu, Plus } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import Logo from "@/components/Logo"
 import CartIcon from "@/components/CartIcon"
+import NotificationIcon from "@/components/NotificationIcon"
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -79,6 +80,7 @@ export default function NavBar() {
               Tableau de bord
             </Link>
           )}
+          {user && <NotificationIcon />}
           <CartIcon />
         </div>
 
@@ -121,6 +123,12 @@ export default function NavBar() {
                     onClick={() => router.push('/account')}
                   >
                     Mon compte
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-zinc-400 focus:text-white focus:bg-zinc-800 cursor-pointer"
+                    onClick={() => router.push('/notifications')}
+                  >
+                    Notifications
                   </DropdownMenuItem>
                   {profile?.role === 'admin' && (
                     <DropdownMenuItem 

@@ -101,7 +101,7 @@ export async function GET(request: Request) {
       .select(`
         id,
         resource_id,
-        total_price,
+        amount,
         created_at,
         resources!inner (
           author_id

@@ -202,7 +202,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [toast]);
+  }, [toast, loadCart]);
 
   // Vider le panier
   const clearCart = useCallback(async () => {

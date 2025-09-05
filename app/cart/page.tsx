@@ -21,8 +21,19 @@ export default function CartPage() {
   };
 
   const handleCheckout = () => {
-    // TODO: Rediriger vers checkout
-    console.log('Redirection vers checkout');
+    if (items.length === 0) {
+      console.log('Panier vide, impossible de passer commande');
+      return;
+    }
+
+    if (items.length === 1) {
+      // Un seul produit : rediriger directement vers le checkout
+      const product = items[0];
+      router.push(`/checkout?product=${product.resource_id}`);
+    } else {
+      // Plusieurs produits : rediriger vers le checkout avec le panier
+      router.push('/checkout');
+    }
   };
 
   // Panier vide

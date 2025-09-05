@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     // Récupérer les commandes
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
-      .select('total_price, created_at')
+      .select('amount, created_at')
       .eq('resource_id', supabase.from('resources').select('id').eq('author_id', user.id));
 
     // Calculer les statistiques

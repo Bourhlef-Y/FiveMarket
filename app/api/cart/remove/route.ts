@@ -46,38 +46,52 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID item manquant' }, { status: 400 });
     }
 
+    console.log('Tentative de suppression de l\'item:', itemId, 'pour l\'utilisateur:', user.id);
+
+    // D'abord, récupérer le panier de l'utilisateur
+    const { data: userCart, error: cartError } = await supabase
+      .from('user_carts')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    console.log('Panier de l\'utilisateur:', { userCart, cartError });
+
+    if (cartError || !userCart) {
+      console.log('Panier non trouvé:', cartError);
+      return NextResponse.json({ error: 'Panier non trouvé' }, { status: 404 });
+    }
+
     // Vérifier que l'item appartient bien au panier de l'utilisateur
     const { data: cartItem, error: findError } = await supabase
       .from('cart_items')
-      .select(`
-        id,
-        cart_id,
-        user_carts!inner (
-          user_id
-        )
-      `)
+      .select('id, cart_id, resource_id')
       .eq('id', itemId)
+      .eq('cart_id', userCart.id)
       .single();
 
+    console.log('Résultat de la recherche de l\'item:', { cartItem, findError });
+
     if (findError || !cartItem) {
+      console.log('Item non trouvé ou erreur:', findError);
       return NextResponse.json({ error: 'Item non trouvé' }, { status: 404 });
     }
 
-    if (cartItem.user_carts[0].user_id !== user.id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    }
-
     // Supprimer l'item
+    console.log('Suppression de l\'item:', itemId);
     const { error: deleteError } = await supabase
       .from('cart_items')
       .delete()
       .eq('id', itemId);
 
+    console.log('Résultat de la suppression:', { deleteError });
+
     if (deleteError) {
-      console.error('Erreur suppression item');
+      console.error('Erreur suppression item:', deleteError);
       return NextResponse.json({ error: 'Erreur suppression' }, { status: 500 });
     }
 
+    console.log('Item supprimé avec succès');
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Erreur inattendue suppression item');

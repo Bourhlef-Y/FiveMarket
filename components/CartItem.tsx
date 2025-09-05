@@ -22,7 +22,7 @@ export default function CartItem({ item }: CartItemProps) {
     
     setIsUpdating(true);
     try {
-      await updateQuantity(item.resource_id, newQuantity);
+      await updateQuantity(item.id, newQuantity);
     } finally {
       setIsUpdating(false);
     }
@@ -31,7 +31,7 @@ export default function CartItem({ item }: CartItemProps) {
   const handleRemove = async () => {
     setIsUpdating(true);
     try {
-      await removeFromCart(item.resource_id);
+      await removeFromCart(item.id);
     } finally {
       setIsUpdating(false);
     }

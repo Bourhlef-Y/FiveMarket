@@ -44,7 +44,7 @@ export async function GET(request: Request) {
       .from('orders')
       .select(`
         id,
-        total_price,
+        amount,
         created_at,
         resources!inner (
           id,
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
           category
         )
       `)
-      .eq('user_id', user.id);
+      .eq('buyer_id', user.id);
 
     if (ordersError) {
       console.error('Erreur récupération commandes:', ordersError);
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 
     // Calculer les statistiques
     const totalPurchases = orders?.length || 0;
-    const totalSpent = orders?.reduce((sum, order) => sum + order.total_price, 0) || 0;
+    const totalSpent = orders?.reduce((sum, order) => sum + order.amount, 0) || 0;
 
     // Calculer les achats par catégorie
     const categoryStats = orders?.reduce((acc: any[], order) => {
@@ -69,12 +69,12 @@ export async function GET(request: Request) {
       const existing = acc.find(cat => cat.category === category);
       if (existing) {
         existing.count += 1;
-        existing.total += order.total_price;
+        existing.total += order.amount;
       } else {
         acc.push({
           category,
           count: 1,
-          total: order.total_price
+          total: order.amount
         });
       }
       return acc;
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
     ) || [];
 
     const recentPurchases = recentOrders.length;
-    const recentSpent = recentOrders.reduce((sum, order) => sum + order.total_price, 0);
+    const recentSpent = recentOrders.reduce((sum, order) => sum + order.amount, 0);
 
     const stats = {
       totalPurchases,

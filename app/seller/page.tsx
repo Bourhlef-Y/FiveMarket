@@ -344,6 +344,14 @@ export default function SellerDashboard() {
             <Button 
               variant="outline" 
               className="w-full justify-start border-zinc-600 text-zinc-300 hover:bg-zinc-700"
+              onClick={() => router.push('/seller/orders')}
+            >
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              Mes commandes
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start border-zinc-600 text-zinc-300 hover:bg-zinc-700"
               onClick={() => router.push('/seller/analytics')}
             >
               <BarChart3 className="w-4 h-4 mr-2" />
